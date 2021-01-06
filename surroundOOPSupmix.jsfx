@@ -26,7 +26,6 @@ out_pin:C output
 out_pin:LFE output
 out_pin:RL output
 out_pin:RR output
-// note: C and LFE are unfiltered
 
 
 @slider
@@ -317,109 +316,109 @@ samplesCollected >= HALFSIZE ?
 	fft_permute(bufferFFTIR, SIZE);
 
 	//////BAND 0
-	bandIndex = 0;
 	// just add together samples, phase information is meaningless
-	Lreal = bufferFFTIL[bandIndex * 2];
-	Limag = bufferFFTIL[bandIndex * 2 + 1];
-	Rreal = bufferFFTIR[bandIndex * 2];
-	Rimag = bufferFFTIR[bandIndex * 2 + 1];
+	Lreal = bufferFFTIL[0];
+	Limag = bufferFFTIL[1];
+	Rreal = bufferFFTIR[0];
+	Rimag = bufferFFTIR[1];
 
 	// fill output FFT buffers
-	bufferFFTOL[bandIndex * 2] = Lreal;
-	bufferFFTOL[bandIndex * 2 + 1] = Limag;
-	bufferFFTOR[bandIndex * 2] = Rreal;
-	bufferFFTOR[bandIndex * 2 + 1] = Rimag;
-	bufferFFTOC[bandIndex * 2] = Lreal + Rreal;
-	bufferFFTOC[bandIndex * 2 + 1] = Limag + Rimag;
-	bufferFFTORL[bandIndex * 2] = Lreal*cosRLtheta + Rreal*sinRLtheta;
-	bufferFFTORL[bandIndex * 2 + 1] = Limag*cosRLtheta + Rimag*sinRLtheta;
-	bufferFFTORR[bandIndex * 2] = Lreal*cosRRtheta + Rreal*sinRRtheta;
-	bufferFFTORR[bandIndex * 2 + 1] = Limag*cosRRtheta + Rimag*sinRRtheta;
+	bufferFFTOL[0] = Lreal;
+	bufferFFTOL[1] = Limag;
+	bufferFFTOR[0] = Rreal;
+	bufferFFTOR[1] = Rimag;
+	bufferFFTOC[0] = Lreal + Rreal;
+	bufferFFTOC[1] = Limag + Rimag;
+	bufferFFTORL[0] = Lreal*cosRLtheta + Rreal*sinRLtheta;
+	bufferFFTORL[1] = Limag*cosRLtheta + Rimag*sinRLtheta;
+	bufferFFTORR[0] = Lreal*cosRRtheta + Rreal*sinRRtheta;
+	bufferFFTORR[1] = Limag*cosRRtheta + Rimag*sinRRtheta;
 
 	//////BANDS 1 to SIZE/2
 	bandIndex = 1;
-	slider2 == 0 ?
-	(
-		loop(HALFSIZE-2,
-			// get dry fft coefficeients
-			Lreal = bufferFFTIL[bandIndex * 2];
-			Limag = bufferFFTIL[bandIndex * 2 + 1];
-			Rreal = bufferFFTIR[bandIndex * 2];
-			Rimag = bufferFFTIR[bandIndex * 2 + 1];
+	loop(HALFSIZE-2,
+		bandReal = 2*bandIndex;
+		bandImag = bandReal+1;
+		// get dry fft coefficeients
+		Lreal = bufferFFTIL[bandReal];
+		Limag = bufferFFTIL[bandImag];
+		Rreal = bufferFFTIR[bandReal];
+		Rimag = bufferFFTIR[bandImag];
 
-			strength = strengthBuffer[bandIndex];
-			// get strength
-			phaseW = phaseWBuffer[bandIndex];
-			// get phase width
+		strength = strengthBuffer[bandIndex];
+		// get strength
+		phaseW = phaseWBuffer[bandIndex];
+		// get phase width
 
-			//// C
+		//// C
 
-			normL = sqrt(sqr(Lreal) + sqr(Limag));
-			normR = sqrt(sqr(Rreal) + sqr(Rimag));
-			normprod = normL * normR;
-			cosineval = Lreal * Rreal + Limag * Rimag;
-			cosnorm = cosineval / normprod;
-			uncapped = acos(cosnorm) / phaseW;
-			weight1 = min(1, uncapped);
-			weight2 = 1 - (weight1 ^ strength);
-			// attenuate if relative norms are very different, and option enabled
-			atten = 1 - (sqr(normL - normR)/sqr(normL + normR));
-			weightC = weight2 * atten ^ (strength * slider10);
+		normL = sqrt(sqr(Lreal) + sqr(Limag));
+		normR = sqrt(sqr(Rreal) + sqr(Rimag));
+		normprod = normL * normR;
+		cosineval = Lreal * Rreal + Limag * Rimag;
+		cosnorm = cosineval / normprod;
+		uncapped = acos(cosnorm) / phaseW;
+		weight1 = min(1, uncapped);
+		weight2 = 1 - (weight1 ^ strength);
+		// attenuate if relative norms are very different, and option enabled
+		atten = 1 - (sqr(normL - normR)/sqr(normL + normR));
+		weightC = weight2 * atten ^ (strength * slider10);
 
-			// calculate and attenuate centre fft
-			Creal = (Lreal + Rreal) * weightC / 2;
-			Cimag = (Limag + Rimag) * weightC / 2;
+		// calculate and attenuate centre fft
+		// should divide by 2 here because two things are added together
+		Creal = (Lreal + Rreal) * weightC / 2;
+		Cimag = (Limag + Rimag) * weightC / 2;
 
 
-			//// RL
-			RLreal1 = Lreal*cosRLthetaminuspiforths + Rreal*sinRLthetaminuspiforths;
-			RLimag1 = Limag*cosRLthetaminuspiforths + Rimag*sinRLthetaminuspiforths;
+		//// RL
+		RLreal1 = Lreal*cosRLthetaminuspiforths + Rreal*sinRLthetaminuspiforths;
+		RLimag1 = Limag*cosRLthetaminuspiforths + Rimag*sinRLthetaminuspiforths;
 
-			RLreal2 = Lreal*cosRLthetapluspiforths + Rreal*sinRLthetapluspiforths;
-			RLimag2 = Limag*cosRLthetapluspiforths + Rimag*sinRLthetapluspiforths;
+		RLreal2 = Lreal*cosRLthetapluspiforths + Rreal*sinRLthetapluspiforths;
+		RLimag2 = Limag*cosRLthetapluspiforths + Rimag*sinRLthetapluspiforths;
 
-			norm1 = sqrt(sqr(RLreal1) + sqr(RLimag1));
-			norm2 = sqrt(sqr(RLreal2) + sqr(RLimag2));
-			normprod = norm1 * norm2;
-			cosineval = RLreal1 * RLreal1 + RLimag1 * RLimag2;
-			cosnorm = cosineval / normprod;
-			uncapped = acos(cosnorm) / phaseW / slider7;
-			weight1 = min(1, uncapped);
-			weight2 = 1 - (weight1 ^ strength);
-			// attenuate if relative norms are very different, and option enabled
-			atten = 1 - (sqr(norm1 - norm2)/sqr(norm1 + norm2));
-			weightRL = weight2 * atten ^ (strength * slider10);
+		norm1 = sqrt(sqr(RLreal1) + sqr(RLimag1));
+		norm2 = sqrt(sqr(RLreal2) + sqr(RLimag2));
+		normprod = norm1 * norm2;
+		cosineval = RLreal1 * RLreal1 + RLimag1 * RLimag2;
+		cosnorm = cosineval / normprod;
+		uncapped = acos(cosnorm) / phaseW / slider7;
+		weight1 = min(1, uncapped);
+		weight2 = 1 - (weight1 ^ strength);
+		// attenuate if relative norms are very different, and option enabled
+		atten = 1 - (sqr(norm1 - norm2)/sqr(norm1 + norm2));
+		weightRL = weight2 * atten ^ (strength * slider10);
 
-			// calculate and attenuate RL fft
-			RLreal = (Lreal*cosRLtheta + Rreal*sinRLtheta)*weightRL;
-			RLimag = (Limag*cosRLtheta + Rimag*sinRLtheta)*weightRL;
-			// this is RL shifted by j (90 degrees phase)
+		// calculate and attenuate RL fft
+		RLreal = (Lreal*cosRLtheta + Rreal*sinRLtheta)*weightRL;
+		RLimag = (Limag*cosRLtheta + Rimag*sinRLtheta)*weightRL;
+		// this is RL shifted by j (90 degrees phase)
 
-			//// RR
-			RRreal1 = Lreal*cosRRthetaminuspiforths + Rreal*sinRRthetaminuspiforths;
-			RRimag1 = Limag*cosRRthetaminuspiforths + Rimag*sinRRthetaminuspiforths;
+		//// RR
+		RRreal1 = Lreal*cosRRthetaminuspiforths + Rreal*sinRRthetaminuspiforths;
+		RRimag1 = Limag*cosRRthetaminuspiforths + Rimag*sinRRthetaminuspiforths;
 
-			RRreal2 = Lreal*cosRRthetapluspiforths + Rreal*sinRRthetapluspiforths;
-			RRimag2 = Limag*cosRRthetapluspiforths + Rimag*sinRRthetapluspiforths;
+		RRreal2 = Lreal*cosRRthetapluspiforths + Rreal*sinRRthetapluspiforths;
+		RRimag2 = Limag*cosRRthetapluspiforths + Rimag*sinRRthetapluspiforths;
 
-			norm1 = sqrt(sqr(RRreal1) + sqr(RRimag1));
-			norm2 = sqrt(sqr(RRreal2) + sqr(RRimag2));
-			normprod = norm1 * norm2;
-			cosineval = RLreal1 * RLreal1 + RLimag1 * RLimag2;
-			cosnorm = cosineval / normprod;
-			uncapped = acos(cosnorm) / phaseW / slider7;
-			weight1 = min(1, uncapped);
-			weight2 = 1 - (weight1 ^ strength);
-			// attenuate if relative norms are very different, and option enabled
-			atten = 1 - (sqr(norm1 - norm2)/sqr(norm1 + norm2));
-			weightRR = weight2 * atten ^ (strength * slider10);
+		norm1 = sqrt(sqr(RRreal1) + sqr(RRimag1));
+		norm2 = sqrt(sqr(RRreal2) + sqr(RRimag2));
+		normprod = norm1 * norm2;
+		cosineval = RLreal1 * RLreal1 + RLimag1 * RLimag2;
+		cosnorm = cosineval / normprod;
+		uncapped = acos(cosnorm) / phaseW / slider7;
+		weight1 = min(1, uncapped);
+		weight2 = 1 - (weight1 ^ strength);
+		// attenuate if relative norms are very different, and option enabled
+		atten = 1 - (sqr(norm1 - norm2)/sqr(norm1 + norm2));
+		weightRR = weight2 * atten ^ (strength * slider10);
 
-			// calculate and attenuate RR fft
-			RRreal = (Lreal*cosRRtheta + Rreal*sinRRtheta)*weightRR;
-			RRimag = (Limag*cosRRtheta + Rimag*sinRRtheta)*weightRR;
-			// this is RR shifted by j (90 degrees phase)
+		// calculate and attenuate RR fft
+		RRreal = (Lreal*cosRRtheta + Rreal*sinRRtheta)*weightRR;
+		RRimag = (Limag*cosRRtheta + Rimag*sinRRtheta)*weightRR;
+		// this is RR shifted by j (90 degrees phase)
 
-			// in this branch slider2 = 0
+		slider2 == 0 ? (
 			// remove center from L
 			Lreal -= Creal;
 			Limag -= Cimag;
@@ -437,124 +436,26 @@ samplesCollected >= HALFSIZE ?
 			// remove RR from L
 			Lreal -= cosRRtheta*RRreal;
 			Limag -= cosRRtheta*RRimag;
-			//     remove RR from R
+			//	   remove RR from R
 			Rreal -= sinRRtheta*RRreal;
 			Rimag -= sinRRtheta*RRimag;
-
-			// fill output fft buffers
-			// because all bands from SIZE/2 onwards are 0
-			// the hilbert will be in the imaginary part of theinverse FFT results
-			// but need to scale coefficeients by 2
-			bufferFFTOL[bandIndex * 2] = Lreal;
-			bufferFFTOL[bandIndex * 2 + 1] = Limag;
-			bufferFFTOR[bandIndex * 2] = Rreal;
-			bufferFFTOR[bandIndex * 2 + 1] = Rimag;
-			bufferFFTOC[bandIndex * 2] = Creal;
-			bufferFFTOC[bandIndex * 2 + 1] = Cimag;
-			bufferFFTORL[bandIndex * 2] = RLreal;
-			bufferFFTORL[bandIndex * 2 + 1] = RLimag;
-			bufferFFTORR[bandIndex * 2] = RRreal;
-			bufferFFTORR[bandIndex * 2 + 1] = RRimag;
-			bandIndex += 1;
 		);
-	) :
-	(
-		loop(HALFSIZE-2,
-			// get dry fft coefficeients
-			Lreal = bufferFFTIL[bandIndex * 2];
-			Limag = bufferFFTIL[bandIndex * 2 + 1];
-			Rreal = bufferFFTIR[bandIndex * 2];
-			Rimag = bufferFFTIR[bandIndex * 2 + 1];
 
-			strength = strengthBuffer[bandIndex];
-			// get strength
-			phaseW = phaseWBuffer[bandIndex];
-			// get phase width
-
-			//// C
-
-			normL = sqrt(sqr(Lreal) + sqr(Limag));
-			normR = sqrt(sqr(Rreal) + sqr(Rimag));
-			normprod = normL * normR;
-			cosineval = Lreal * Rreal + Limag * Rimag;
-			cosnorm = cosineval / normprod;
-			uncapped = acos(cosnorm) / phaseW;
-			weight1 = min(1, uncapped);
-			weight2 = 1 - (weight1 ^ strength);
-			// attenuate if relative norms are very different, and option enabled
-			atten = 1 - (sqr(normL - normR)/sqr(normL + normR));
-			weightC = weight2 * atten ^ (strength * slider10);
-
-			// calculate and attenuate centre fft
-			// should divide by 2 here because two things are added together
-			Creal = (Lreal + Rreal) * weightC / 2;
-			Cimag = (Limag + Rimag) * weightC / 2;
-
-
-			//// RL
-			RLreal1 = Lreal*cosRLthetaminuspiforths + Rreal*sinRLthetaminuspiforths;
-			RLimag1 = Limag*cosRLthetaminuspiforths + Rimag*sinRLthetaminuspiforths;
-
-			RLreal2 = Lreal*cosRLthetapluspiforths + Rreal*sinRLthetapluspiforths;
-			RLimag2 = Limag*cosRLthetapluspiforths + Rimag*sinRLthetapluspiforths;
-
-			norm1 = sqrt(sqr(RLreal1) + sqr(RLimag1));
-			norm2 = sqrt(sqr(RLreal2) + sqr(RLimag2));
-			normprod = norm1 * norm2;
-			cosineval = RLreal1 * RLreal1 + RLimag1 * RLimag2;
-			cosnorm = cosineval / normprod;
-			uncapped = acos(cosnorm) / phaseW / slider7;
-			weight1 = min(1, uncapped);
-			weight2 = 1 - (weight1 ^ strength);
-			// attenuate if relative norms are very different, and option enabled
-			atten = 1 - (sqr(norm1 - norm2)/sqr(norm1 + norm2));
-			weightRL = weight2 * atten ^ (strength * slider10);
-
-			// calculate and attenuate RL fft
-			RLreal = (Lreal*cosRLtheta + Rreal*sinRLtheta)*weightRL;
-			RLimag = (Limag*cosRLtheta + Rimag*sinRLtheta)*weightRL;
-			// this is RL shifted by j (90 degrees phase)
-
-			//// RR
-			RRreal1 = Lreal*cosRRthetaminuspiforths + Rreal*sinRRthetaminuspiforths;
-			RRimag1 = Limag*cosRRthetaminuspiforths + Rimag*sinRRthetaminuspiforths;
-
-			RRreal2 = Lreal*cosRRthetapluspiforths + Rreal*sinRRthetapluspiforths;
-			RRimag2 = Limag*cosRRthetapluspiforths + Rimag*sinRRthetapluspiforths;
-
-			norm1 = sqrt(sqr(RRreal1) + sqr(RRimag1));
-			norm2 = sqrt(sqr(RRreal2) + sqr(RRimag2));
-			normprod = norm1 * norm2;
-			cosineval = RLreal1 * RLreal1 + RLimag1 * RLimag2;
-			cosnorm = cosineval / normprod;
-			uncapped = acos(cosnorm) / phaseW / slider7;
-			weight1 = min(1, uncapped);
-			weight2 = 1 - (weight1 ^ strength);
-			// attenuate if relative norms are very different, and option enabled
-			atten = 1 - (sqr(norm1 - norm2)/sqr(norm1 + norm2));
-			weightRR = weight2 * atten ^ (strength * slider10);
-
-			// calculate and attenuate RR fft
-			RRreal = (Lreal*cosRRtheta + Rreal*sinRRtheta)*weightRR;
-			RRimag = (Limag*cosRRtheta + Rimag*sinRRtheta)*weightRR;
-			// this is RR shifted by j (90 degrees phase)
-
-			// fill output fft buffers
-			// because all bands from SIZE/2 onwards are 0
-			// the hilbert will be in the imaginary part of theinverse FFT results
-			// but need to scale coefficeients by 2
-			bufferFFTOL[bandIndex * 2] = Lreal;
-			bufferFFTOL[bandIndex * 2 + 1] = Limag;
-			bufferFFTOR[bandIndex * 2] = Rreal;
-			bufferFFTOR[bandIndex * 2 + 1] = Rimag;
-			bufferFFTOC[bandIndex * 2] = Creal;
-			bufferFFTOC[bandIndex * 2 + 1] = Cimag;
-			bufferFFTORL[bandIndex * 2] = RLreal;
-			bufferFFTORL[bandIndex * 2 + 1] = RLimag;
-			bufferFFTORR[bandIndex * 2] = RRreal;
-			bufferFFTORR[bandIndex * 2 + 1] = RRimag;
-			bandIndex += 1;
-		);
+		// fill output fft buffers
+		// because all bands from SIZE/2 onwards are 0
+		// the hilbert will be in the imaginary part of theinverse FFT results
+		// but need to scale coefficeients by 2
+		bufferFFTOL[bandReal] = Lreal;
+		bufferFFTOL[bandImag] = Limag;
+		bufferFFTOR[bandReal] = Rreal;
+		bufferFFTOR[bandImag] = Rimag;
+		bufferFFTOC[bandReal] = Creal;
+		bufferFFTOC[bandImag] = Cimag;
+		bufferFFTORL[bandReal] = RLreal;
+		bufferFFTORL[bandImag] = RLimag;
+		bufferFFTORR[bandReal] = RRreal;
+		bufferFFTORR[bandImag] = RRimag;
+		bandIndex += 1;
 	);
 
 	////// BAND SIZE/2-1
