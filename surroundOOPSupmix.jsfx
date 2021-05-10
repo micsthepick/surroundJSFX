@@ -1,7 +1,7 @@
 // based on vocalrediso.jsfx
 // uses some code from https://github.com/Nbickford/REAPERDenoiser
 
-desc: decode OOPS at -pi/6 and -pi/3 with better seperation
+desc: decode OOPS at -pi/6 and 2/3*pi with better seperation
 //tags: processing stereo surround phase fft
 //author: Michael Pannekoek
 
@@ -15,8 +15,6 @@ slider7:1<0.05,2,0.05>Rear width (multiplier)
 slider8:90<1,180,0.1>Low Freq phase width (Degrees)
 slider9:90<1,180,0.1>High Freq phase width (Degrees)
 slider10:1<0,1,0.05>Attenuate if different volume
-slider12:0<0,5,1{Hann,Triangular,Lanczos (sinc),Blackman-Harris,Blackman-Nutall,Nutall}>pre FFT window
-slider13:2<0,5,1{None,Hann,Triangular,Lanczos (sinc),Blackman-Harris,Blackman-Nutall,Nutall}>post FFT window
 
 in_pin:left input
 in_pin:right input
@@ -42,6 +40,7 @@ lowStrength = slider3;
 highstrength = slider4;
 phaseWlow = slider8*$pi/180;
 phaseWhigh = slider9*$pi/180;
+rwmult = 1 / slider7;
 // fill strengthBuffer and phaseWBuffer
 bandIndex = 0;
 loop(SIZE,
@@ -57,73 +56,8 @@ loop(SIZE,
 	phaseWBuffer[bandIndex] = phaseW;
 	// precalculate phase width
 
-	slider12 == 0 ?
-	(
-		windowBufferIn[bandIndex] = 0.5 - 0.5 * cos(2*$pi*bandIndex/SIZE);
-	);
-	slider12 == 1 ?
-	(
-		windowBufferIn[bandIndex] = bandIndex < HALFSIZE ? (
-			bandIndex / HALFSIZEMINUS1
-		) : (
-			(SIZE-bandIndex-1) / HALFSIZEMINUS1
-		);
-	);
-	slider12 == 2 ?
-	(
-		windowBufferIn[bandIndex] = sinc(2 * bandIndex / SIZEMINUSONE);
-	);
-	slider12 == 3 ?
-	(
-		cosIn = $pi * bandIndex / SIZE;
-		windowBufferIn[bandIndex] = 0.35875 - 0.48829 * cos(2 * cosIn) + 0.14128 * cos(4 * cosIn) - 0.01168 * cos(6 * cosIn);
-	);
-	slider12 == 4 ?
-	(
-		cosIn = $pi * bandIndex / SIZE;
-		windowBufferIn[bandIndex] = 0.3635819 - 0.4891775 * cos(2 * cosIn) + 0.1365995 * cos(4 * cosIn) - 0.0106411 * cos(6 * cosIn);
-	);
-	slider12 == 5 ?
-	(
-		cosIn = $pi * bandIndex / SIZE;
-		windowBufferIn[bandIndex] = 0.355768 - 0.487396 * cos(2 * cosIn) + 0.144232 * cos(4 * cosIn) - 0.012604 * cos(6 * cosIn);
-	);
-
-	slider13 == 0 ?
-	(
-		windowBufferOut[bandIndex] = 1;
-	);
-
-	slider13 == 1 ?
-	(
-		windowBufferOut[bandIndex] = 0.5 - 0.5 * cos(2*$pi*bandIndex/SIZE);
-	);
-	slider13 == 2 ? (
-		windowBufferOut[bandIndex] = bandIndex < HALFSIZE ? (
-			bandIndex / HALFSIZEMINUSONE
-		) : (
-			(SIZEMINUSONE-bandIndex) / HALFSIZEMINUSONE
-		);
-	);
-	slider13 == 3 ?
-	(
-		windowBufferOut[bandIndex] = sinc(2 * bandIndex / SIZEMINUSONE);
-	);
-	slider13 == 4 ?
-	(
-		cosIn = $pi * bandIndex / SIZE;
-		windowBufferOut[bandIndex] = 0.35875 - 0.48829 * cos(2 * cosIn) + 0.14128 * cos(4 * cosIn) - 0.01168 * cos(6 * cosIn);
-	);
-	slider13 == 5 ?
-	(
-		cosIn = $pi * bandIndex / SIZE;
-		windowBufferOut[bandIndex] = 0.3635819 - 0.4891775 * cos(2 * cosIn) + 0.1365995 * cos(4 * cosIn) - 0.0106411 * cos(6 * cosIn);
-	);
-	slider13 == 6 ?
-	(
-		cosIn = $pi * bandIndex / SIZE;
-		windowBufferOut[bandIndex] = 0.355768 - 0.487396 * cos(2 * cosIn) + 0.144232 * cos(4 * cosIn) - 0.012604 * cos(6 * cosIn);
-	);
+	windowBufferIn[bandIndex] = sin($pi*(bandIndex+1/2)/SIZE);
+	windowBufferOut[bandIndex] = sin($pi*(bandIndex+1/2)/SIZE);
 
 	bandIndex += 1;
 	// next index
@@ -133,7 +67,7 @@ loop(SIZE,
 
 @init
 RLtheta = -$pi/6;
-RRtheta = -$pi/3;
+RRtheta = 2*$pi/3;
 cosRLtheta = cos(RLtheta);
 sinRLtheta = sin(RLtheta);
 cosRRtheta = cos(RRtheta);
@@ -150,10 +84,11 @@ sinRRthetapluspiforths = sin(RRtheta+$pi/4);
 // init variables
 // buffers
 // FFT - fft window size (will be constant)
-SIZE = 8192;
+SIZE = 4096;
 SIZEMINUSONE = SIZE-1;
 DOUBLESIZE = SIZE*2;
 HALFSIZE = SIZE/2;
+HALFSIZEINV = 2/SIZE;
 HALFSIZEMINUSONE = HALFSIZE-1;
 // track how many half frames of delay from the start we are
 // to mute the first inital buffers
@@ -244,23 +179,23 @@ outScale = windowTileIn1 * windowTileOut1 + windowTileIn2 * windowTileOut2;
 // output samples
 outLPart1 = bufferO1L[tilePos1] * windowTileOut1;
 outLPart2 = bufferO2L[tilePos2] * windowTileOut2;
-outL = (outLPart1 + outLPart2) / outScale;
+outL = (outLPart1 + outLPart2);
 
 outRPart1 = bufferO1R[tilePos1] * windowTileOut1;
 outRPart2 = bufferO2R[tilePos2] * windowTileOut2;
-outR = (outRPart1 + outRPart2) / outScale;
+outR = (outRPart1 + outRPart2);
 
 outCPart1 = bufferO1C[tilePos1] * windowTileOut1;
 outCPart2 = bufferO2C[tilePos2] * windowTileOut2;
-outC = (outCPart1 + outCPart2) / outScale;
+outC = (outCPart1 + outCPart2);
 
 outRLPart1 = bufferO1RL[tilePos1] * windowTileOut1;
 outRLPart2 = bufferO2RL[tilePos2] * windowTileOut2;
-outRL = (outRLPart1 + outRLPart2) / outScale;
+outRL = (outRLPart1 + outRLPart2);
 
 outRRPart1 = bufferO1RR[tilePos1] * windowTileOut1;
 outRRPart2 = bufferO2RR[tilePos2] * windowTileOut2;
-outRR = (outRRPart1 + outRRPart2) / outScale;
+outRR = (outRRPart1 + outRRPart2);
 
 // output audio
 spl0 = amp * outL;
@@ -292,9 +227,9 @@ samplesCollected >= HALFSIZE ?
 	loop(SIZE,
 		// divide by HALFSIZE because applying the FFT and IFFT adds a factor of SIZE
 		// and filtering out the negative frequencies adds a factor of 1/2
-		bufferFFTIL[2 * index + 0] = bufferI1L[index] / HALFSIZE; // real
+		bufferFFTIL[2 * index + 0] = bufferI1L[index] * HALFSIZEINV; // real
 		bufferFFTIL[2 * index + 1] = 0.0; // imaginary
-		bufferFFTIR[2 * index + 0] = bufferI1R[index] / HALFSIZE; // real
+		bufferFFTIR[2 * index + 0] = bufferI1R[index] * HALFSIZEINV; // real
 		bufferFFTIR[2 * index + 1] = 0.0; // imaginary
 		index += 1;
 		// Next index
@@ -323,22 +258,22 @@ samplesCollected >= HALFSIZE ?
 	Rimag = bufferFFTIR[1];
 
 	// fill output FFT buffers
-	bufferFFTOL[0] = Lreal;
-	bufferFFTOL[1] = Limag;
-	bufferFFTOR[0] = Rreal;
-	bufferFFTOR[1] = Rimag;
-	bufferFFTOC[0] = Lreal + Rreal;
-	bufferFFTOC[1] = Limag + Rimag;
-	bufferFFTORL[0] = Lreal*cosRLtheta + Rreal*sinRLtheta;
-	bufferFFTORL[1] = Limag*cosRLtheta + Rimag*sinRLtheta;
-	bufferFFTORR[0] = Lreal*cosRRtheta + Rreal*sinRRtheta;
-	bufferFFTORR[1] = Limag*cosRRtheta + Rimag*sinRRtheta;
+	bufferFFTOL[0] = Lreal*0.5;
+	bufferFFTOL[1] = Limag*0.5;
+	bufferFFTOR[0] = Rreal*0.5;
+	bufferFFTOR[1] = Rimag*0.5;
+	bufferFFTOC[0] = (Lreal + Rreal)*0.25;
+	bufferFFTOC[1] = (Limag + Rimag)*0.25;
+	bufferFFTORL[0] = (Lreal*cosRLtheta + Rreal*sinRLtheta)*0.5;
+	bufferFFTORL[1] = (Limag*cosRLtheta + Rimag*sinRLtheta)*0.5;
+	bufferFFTORR[0] = (Lreal*cosRRtheta + Rreal*sinRRtheta)*0.5;
+	bufferFFTORR[1] = (Limag*cosRRtheta + Rimag*sinRRtheta)*0.5;
 
-	//////BANDS 1 to SIZE/2
+	//////BANDS 1 to SIZE/2-2
 	bandIndex = 1;
-	loop(HALFSIZE-2,
-		bandReal = 2*bandIndex;
-		bandImag = bandReal+1;
+	bandReal = 2;
+	bandImag = 3;
+	loop(HALFSIZE-1,
 		// get dry fft coefficeients
 		Lreal = bufferFFTIL[bandReal];
 		Limag = bufferFFTIL[bandImag];
@@ -366,8 +301,8 @@ samplesCollected >= HALFSIZE ?
 
 		// calculate and attenuate centre fft
 		// should divide by 2 here because two things are added together
-		Creal = (Lreal + Rreal) * weightC / 2;
-		Cimag = (Limag + Rimag) * weightC / 2;
+		Creal = (Lreal + Rreal) * weightC * 0.5;
+		Cimag = (Limag + Rimag) * weightC * 0.5;
 
 
 		//// RL
@@ -382,7 +317,7 @@ samplesCollected >= HALFSIZE ?
 		normprod = norm1 * norm2;
 		cosineval = RLreal1 * RLreal1 + RLimag1 * RLimag2;
 		cosnorm = cosineval / normprod;
-		uncapped = acos(cosnorm) / phaseW / slider7;
+		uncapped = acos(cosnorm) / phaseW * rwmult;
 		weight1 = min(1, uncapped);
 		weight2 = 1 - (weight1 ^ strength);
 		// attenuate if relative norms are very different, and option enabled
@@ -404,9 +339,9 @@ samplesCollected >= HALFSIZE ?
 		norm1 = sqrt(sqr(RRreal1) + sqr(RRimag1));
 		norm2 = sqrt(sqr(RRreal2) + sqr(RRimag2));
 		normprod = norm1 * norm2;
-		cosineval = RLreal1 * RLreal1 + RLimag1 * RLimag2;
+		cosineval = RRreal1 * RRreal1 + RRimag1 * RRimag2;
 		cosnorm = cosineval / normprod;
-		uncapped = acos(cosnorm) / phaseW / slider7;
+		uncapped = acos(cosnorm) / phaseW * rwmult;
 		weight1 = min(1, uncapped);
 		weight2 = 1 - (weight1 ^ strength);
 		// attenuate if relative norms are very different, and option enabled
@@ -416,7 +351,7 @@ samplesCollected >= HALFSIZE ?
 		// calculate and attenuate RR fft
 		RRreal = (Lreal*cosRRtheta + Rreal*sinRRtheta)*weightRR;
 		RRimag = (Limag*cosRRtheta + Rimag*sinRRtheta)*weightRR;
-		// this is RR shifted by j (90 degrees phase)
+		// this is RR shifted by k (-90 degrees phase)
 
 		slider2 == 0 ? (
 			// remove center from L
@@ -436,7 +371,7 @@ samplesCollected >= HALFSIZE ?
 			// remove RR from L
 			Lreal -= cosRRtheta*RRreal;
 			Limag -= cosRRtheta*RRimag;
-			//	   remove RR from R
+			// remove RR from R
 			Rreal -= sinRRtheta*RRreal;
 			Rimag -= sinRRtheta*RRimag;
 		);
@@ -455,11 +390,12 @@ samplesCollected >= HALFSIZE ?
 		bufferFFTORL[bandImag] = RLimag;
 		bufferFFTORR[bandReal] = RRreal;
 		bufferFFTORR[bandImag] = RRimag;
-		bandIndex += 1;
+		bandReal += 2;
+		bandImag += 2;
 	);
 
-	////// BAND SIZE/2-1
-	bandIndex = HALFSIZE-1;
+	////// BAND SIZE/2
+	bandIndex = HALFSIZE;
 	// just add together samples, phase information is meaningless
 	Lreal = bufferFFTIL[bandIndex * 2];
 	Limag = bufferFFTIL[bandIndex * 2 + 1];
@@ -467,23 +403,23 @@ samplesCollected >= HALFSIZE ?
 	Rimag = bufferFFTIR[bandIndex * 2 + 1];
 
 	// fill output FFT buffers
-	bufferFFTOL[bandIndex * 2] = Lreal;
-	bufferFFTOL[bandIndex * 2 + 1] = Limag;
-	bufferFFTOR[bandIndex * 2] = Rreal;
-	bufferFFTOR[bandIndex * 2 + 1] = Rimag;
-	bufferFFTOC[bandIndex * 2] = Lreal + Rreal;
-	bufferFFTOC[bandIndex * 2 + 1] = Limag + Rimag;
-	bufferFFTORL[bandIndex * 2] = Lreal*cosRLtheta + Rreal*sinRLtheta;
-	bufferFFTORL[bandIndex * 2 + 1] = Limag*cosRLtheta + Rimag*sinRLtheta;
-	bufferFFTORR[bandIndex * 2] = Lreal*cosRRtheta + Rreal*sinRRtheta;;
-	bufferFFTORR[bandIndex * 2 + 1] = Limag*cosRRtheta + Rimag*sinRRtheta;
+	bufferFFTOL[bandIndex * 2] = Lreal*0.5;
+	bufferFFTOL[bandIndex * 2 + 1] = Limag*0.5;
+	bufferFFTOR[bandIndex * 2] = Rreal*0.5;
+	bufferFFTOR[bandIndex * 2 + 1] = Rimag*0.5;
+	bufferFFTOC[bandIndex * 2] = (Lreal + Rreal)*0.25;
+	bufferFFTOC[bandIndex * 2 + 1] = (Limag + Rimag)*0.25;
+	bufferFFTORL[bandIndex * 2] = (Lreal*cosRLtheta + Rreal*sinRLtheta)*0.5;
+	bufferFFTORL[bandIndex * 2 + 1] = (Limag*cosRLtheta + Rimag*sinRLtheta)*0.5;
+	bufferFFTORR[bandIndex * 2] = (Lreal*cosRRtheta + Rreal*sinRRtheta)*0.5;
+	bufferFFTORR[bandIndex * 2 + 1] = (Limag*cosRRtheta + Rimag*sinRRtheta)*0.5;
 
 	// BANDS SIZE/2 to SIZE-1
-	memset(bufferFFTOL+SIZE, 0, SIZE);
-	memset(bufferFFTOR+SIZE, 0, SIZE);
-	memset(bufferFFTOC+SIZE, 0, SIZE);
-	memset(bufferFFTORL+SIZE, 0, SIZE);
-	memset(bufferFFTORR+SIZE, 0, SIZE);
+	memset(bufferFFTOL+SIZE+2, 0, SIZE-2);
+	memset(bufferFFTOR+SIZE+2, 0, SIZE-2);
+	memset(bufferFFTOC+SIZE+2, 0, SIZE-2);
+	memset(bufferFFTORL+SIZE+2, 0, SIZE-2);
+	memset(bufferFFTORR+SIZE+2, 0, SIZE-2);
 
 	// apply ifft to FFTOL
 	fft_ipermute(bufferFFTOL, SIZE);
@@ -515,7 +451,7 @@ samplesCollected >= HALFSIZE ?
 		// RL and RR have had hilbert applied
 		// take the - 90 degree shift to compensate
 		bufferO1RL[index] = -bufferFFTORL[2 * index + 1];
-		bufferO1RR[index] = -bufferFFTORR[2 * index + 1];
+		bufferO1RR[index] = bufferFFTORR[2 * index + 1];
 		index += 1;
 	);
 
