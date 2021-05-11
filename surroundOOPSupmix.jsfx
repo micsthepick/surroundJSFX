@@ -14,7 +14,7 @@ slider4:0.5<-5,5,0.001>strength at High Freq
 slider7:1<0.05,2,0.05>Rear width (multiplier)
 slider8:90<1,180,0.1>Low Freq phase width (Degrees)
 slider9:90<1,180,0.1>High Freq phase width (Degrees)
-slider10:1<0,1,0.05>Attenuate if different volume
+-slider10:1<0,1,0.05>Attenuate if different volume
 
 in_pin:left input
 in_pin:right input
@@ -72,6 +72,13 @@ cosRLtheta = cos(RLtheta);
 sinRLtheta = sin(RLtheta);
 cosRRtheta = cos(RRtheta);
 sinRRtheta = sin(RRtheta);
+cosRLthetaSQ = sqr(cosRLtheta);
+sinRLthetaSQ = sqr(sinRLtheta);
+cosRRthetaSQ = sqr(cosRRtheta);
+sinRRthetaSQ = sqr(sinRRtheta);
+sin2RLThetaABS = abs(sin(2*RLTheta));
+sin2RRThetaABS = abs(sin(2*RRTheta));
+
 cosRLthetaminuspiforths = cos(RLtheta-$pi/4);
 cosRLthetapluspiforths = cos(RLtheta+$pi/4);
 sinRLthetaminuspiforths = sin(RLtheta-$pi/4);
@@ -279,25 +286,36 @@ samplesCollected >= HALFSIZE ?
 		Limag = bufferFFTIL[bandImag];
 		Rreal = bufferFFTIR[bandReal];
 		Rimag = bufferFFTIR[bandImag];
+		
+		Ldot = sqr(Lreal) + sqr(Limag);
+		Rdot = sqr(Rreal) + sqr(Rimag);
+		Lnorm = sqrt(Ldot);
+		Rnorm = sqrt(Rdot);
 
 		strength = strengthBuffer[bandIndex];
 		// get strength
 		phaseW = phaseWBuffer[bandIndex];
 		// get phase width
+		
+		thetaC = atan2(Lreal, Limag)-atan2(Rreal, Rimag);
+		thetaC < -$pi ? thetaC += 2*$pi;
+		thetaC > $pi ? thetaC -= 2*$pi;
 
 		//// C
 
-		normL = sqrt(sqr(Lreal) + sqr(Limag));
-		normR = sqrt(sqr(Rreal) + sqr(Rimag));
-		normprod = normL * normR;
-		cosineval = Lreal * Rreal + Limag * Rimag;
-		cosnorm = cosineval / normprod;
-		uncapped = acos(cosnorm) / phaseW;
-		weight1 = min(1, uncapped);
-		weight2 = 1 - (weight1 ^ strength);
+		//normL = sqrt(sqr(Lreal) + sqr(Limag));
+		//normR = sqrt(sqr(Rreal) + sqr(Rimag));
+		//normprod = normL * normR;
+		//cosineval = Lreal * Rreal + Limag * Rimag;
+		//cosnorm = cosineval / normprod;
+		
+		
+		uncapped = abs(thetaC) / phaseW * rwmult;
+		weightC1 = min(1, uncapped);
+		weightC2 = 1 - (weightC1 ^ strength);
 		// attenuate if relative norms are very different, and option enabled
-		atten = 1 - (sqr(normL - normR)/sqr(normL + normR));
-		weightC = weight2 * atten ^ (strength * slider10);
+		attenC = (2*Lnorm*Rnorm/(Ldot+Rdot));
+		weightC = weightC2 * attenC ^ (strength * slider10);
 
 		// calculate and attenuate centre fft
 		// should divide by 2 here because two things are added together
@@ -312,17 +330,20 @@ samplesCollected >= HALFSIZE ?
 		RLreal2 = Lreal*cosRLthetapluspiforths + Rreal*sinRLthetapluspiforths;
 		RLimag2 = Limag*cosRLthetapluspiforths + Rimag*sinRLthetapluspiforths;
 
-		norm1 = sqrt(sqr(RLreal1) + sqr(RLimag1));
-		norm2 = sqrt(sqr(RLreal2) + sqr(RLimag2));
-		normprod = norm1 * norm2;
-		cosineval = RLreal1 * RLreal1 + RLimag1 * RLimag2;
-		cosnorm = cosineval / normprod;
-		uncapped = acos(cosnorm) / phaseW * rwmult;
-		weight1 = min(1, uncapped);
-		weight2 = 1 - (weight1 ^ strength);
+		//norm1 = sqrt(sqr(RLreal1) + sqr(RLimag1));
+		//norm2 = sqrt(sqr(RLreal2) + sqr(RLimag2));
+		//normprod = norm1 * norm2;
+		//cosineval = RLreal1 * RLreal2 + RLimag1 * RLimag2;
+		//cosnorm = cosineval / normprod;
+		theta = atan2(RLreal1, RLimag1)-atan2(RLreal2, RLimag2);
+		theta < -$pi ? theta += 2*$pi;
+		theta > $pi ? theta -= 2*$pi;
+		uncapped = abs(theta) / phaseW * rwmult;
+		weightRL1 = min(1, uncapped);
+		weightRL2 = 1 - (weightRL1 ^ strength);
 		// attenuate if relative norms are very different, and option enabled
-		atten = 1 - (sqr(norm1 - norm2)/sqr(norm1 + norm2));
-		weightRL = weight2 * atten ^ (strength * slider10);
+		attenRL = (sin2RLThetaABS*Lnorm*Rnorm/(sinRLthetaSQ*Ldot+cosRLthetaSQ*Rdot));
+		weightRL = weightRL2 * attenRL ^ (strength * slider10);
 
 		// calculate and attenuate RL fft
 		RLreal = (Lreal*cosRLtheta + Rreal*sinRLtheta)*weightRL;
@@ -336,17 +357,20 @@ samplesCollected >= HALFSIZE ?
 		RRreal2 = Lreal*cosRRthetapluspiforths + Rreal*sinRRthetapluspiforths;
 		RRimag2 = Limag*cosRRthetapluspiforths + Rimag*sinRRthetapluspiforths;
 
-		norm1 = sqrt(sqr(RRreal1) + sqr(RRimag1));
-		norm2 = sqrt(sqr(RRreal2) + sqr(RRimag2));
-		normprod = norm1 * norm2;
-		cosineval = RRreal1 * RRreal1 + RRimag1 * RRimag2;
-		cosnorm = cosineval / normprod;
-		uncapped = acos(cosnorm) / phaseW * rwmult;
-		weight1 = min(1, uncapped);
-		weight2 = 1 - (weight1 ^ strength);
+		//norm1 = sqrt(sqr(RRreal1) + sqr(RRimag1));
+		//norm2 = sqrt(sqr(RRreal2) + sqr(RRimag2));
+		//normprod = norm1 * norm2;
+		//cosineval = RRreal1 * RRreal2 + RRimag1 * RRimag2;
+		//cosnorm = cosineval / normprod;
+		theta =  atan2(RRreal1, RRimag1)-atan2(RRreal2, RRimag2);;
+		theta < -$pi ? theta += 2*$pi;
+		theta > $pi ? theta -= 2*$pi;
+		uncapped = abs(theta) / phaseW * rwmult;
+		weightRR1 = min(1, uncapped);
+		weightRR2 = 1 - (weightRR1 ^ strength);
 		// attenuate if relative norms are very different, and option enabled
-		atten = 1 - (sqr(norm1 - norm2)/sqr(norm1 + norm2));
-		weightRR = weight2 * atten ^ (strength * slider10);
+		attenRR = (sin2RRThetaABS*Lnorm*Rnorm/(sinRRthetaSQ*Ldot+cosRRthetaSQ*Rdot));
+		weightRR = weightRR2 * attenRR ^ (strength * slider10);
 
 		// calculate and attenuate RR fft
 		RRreal = (Lreal*cosRRtheta + Rreal*sinRRtheta)*weightRR;
