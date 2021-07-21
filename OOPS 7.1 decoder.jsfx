@@ -1,7 +1,7 @@
 // based on vocalrediso.jsfx
 // uses some code from https://github.com/Nbickford/REAPERDenoiser
 
-desc: decode OOPS at -pi/6 and 2/3*pi with better seperation
+desc: decode OOPS at -pi/6 and 2/3*pi and upmix to 7.1
 //tags: processing stereo surround phase fft
 //author: Michael Pannekoek
 
@@ -24,6 +24,8 @@ out_pin:C output
 out_pin:LFE output
 out_pin:RL output
 out_pin:RR output
+out_pin:SL output
+out_pin:SR output
 
 
 @slider
@@ -209,6 +211,8 @@ spl2 += amp * outCwet;
 spl3 += amp * outLFE;
 spl4 += amp * outRL;
 spl5 += amp * outRR;
+spl6 += amp * (outRL + outL) * 0.70710678118654752;
+spl7 += amp * (outRR + outR) * 0.70710678118654752;
 
 // write to input tile buffers:
 // Left + Right input buffers

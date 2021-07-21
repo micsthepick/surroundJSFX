@@ -1,0 +1,63 @@
+desc: Encode 7(.1) channel sound as two channels (first downmixing to 5.1)
+//tags: processing stereo surround phase fft
+//author: Michael Pannekoek
+
+import cookdsp.jsfx-inc
+
+slider1:0<-60,20,0.1>Output volume (dB)
+
+in_pin:L input
+in_pin:R input
+in_pin:C input
+in_pin:LFE input
+in_pin:RL input
+in_pin:RR input
+in_pin:SL input
+in_pin:SR input
+out_pin:L output
+out_pin:R output
+
+
+@slider
+amp = 0.3 * 10^(slider1/20);
+// slider1 converted from dB
+// multiplied by approximate reciprocal of highest possible value
+
+@init
+RLhilb.hilbert();
+RRhilb.hilbert();
+bufL = 0;
+bufR = 3;
+freembuf(6);
+off = 0;
+
+@sample
+inL = spl0 + 0.5 * spl6;
+inR = spl1 + 0.5 * spl7;
+inC = spl2 + spl3;
+inTL = spl4 + 0.70710678118654752 * spl6;
+inTR = spl5 + 0.70710678118654752 * spl7;
+outL = bufL[off];
+outR = bufR[off];
+outC = inC * 0.70710678118654752;
+bufL[off] = inL + outC;
+bufR[off] = inR + outC;
+RLhilb.hilbert_do(inTL);
+RRhilb.hilbert_do(inTR);
+outRL = RLhilb.imag;
+outRR = RRhilb.imag;
+
+outL += 0.86602540378443865 * outRL; // sqrt(3) / 2
+outL += 0.5 * outRR;
+outR += -0.5 * outRL;
+outR += -0.86602540378443865 * outRR; // -sqrt(3) / 2
+
+spl0 = amp * outL;
+spl1 = amp * outR;
+spl2 = 0;
+spl3 = 0;
+spl4 = 0;
+spl5 = 0;
+
+off += 1;
+off >= 3 ? off = 0;
