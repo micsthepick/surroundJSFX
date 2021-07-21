@@ -135,7 +135,7 @@ samplesCollected = 0;
 // so that it can be compensated for
 pdc_delay = SIZE;
 // delay is one full buffer
-pdc_bot_ch = 0; pdc_top_ch = 6;
+pdc_bot_ch = 0; pdc_top_ch = 8;
 // which channels are delayed
 // (channel number must be greater than or equal to 0,
 // but less than 2, so 0 and 1 - LR output).
@@ -201,12 +201,12 @@ outRR = (outRRPart1 + outRRPart2);
 // output audio
 spl0 = amp * outL;
 spl1 = amp * outR;
-spl2 += amp * outCwet;
-spl3 += amp * outLFE;
+spl2 += amp * outCwet * 2;
+spl3 += amp * outLFE * 2;
 spl4 += amp * outRL;
 spl5 += amp * outRR;
-spl6 += amp * (outRL + outL) * 0.5;
-spl7 += amp * (outRR + outR) * 0.5;
+spl6 = amp * (outRL + outL) * 0.5;
+spl7 = amp * (outRR + outR) * 0.5;
 
 // write to input tile buffers:
 // Left + Right input buffers

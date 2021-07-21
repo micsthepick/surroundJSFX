@@ -30,13 +30,16 @@ bufL = 0;
 bufR = 3;
 freembuf(6);
 off = 0;
+// report the delay that this plugin generates
+pdc_delay = 3;
+pdc_bot_ch=0; pdc_top_ch=8;
 
 @sample
-inL = 0.70710678118654752 * spl0 + 0.5 * spl6;
-inR = 0.70710678118654752 * spl1 + 0.5 * spl7;
-inC = spl2 + spl3;
-inTL = 0.5 * spl4 + 0.70710678118654752 * spl6;
-inTR = 0.5 * spl5 + 0.70710678118654752 * spl7;
+inL = 2 * spl0 + 0.5 * spl6;
+inR = 2 * spl1 + 0.5 * spl7;
+inC = (spl2 + spl3);
+inTL = spl4 + 0.70710678118654752 * spl6;
+inTR = spl5 + 0.70710678118654752 * spl7;
 outL = bufL[off];
 outR = bufR[off];
 outC = inC * 0.70710678118654752;
@@ -58,6 +61,8 @@ spl2 = 0;
 spl3 = 0;
 spl4 = 0;
 spl5 = 0;
+spl6 = 0;
+spl7 = 0;
 
 off += 1;
 off >= 3 ? off = 0;
