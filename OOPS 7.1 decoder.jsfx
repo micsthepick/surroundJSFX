@@ -29,14 +29,8 @@ out_pin:SR output
 
 
 @slider
-// calculate sinc, handling 0 as the limiting value
-function sinc(x)
-(
-	sincIn = $pi * x;
-	sincIn == 0 ? 1 : sin(sincIn) / sincIn;
-);
 // db to dec
-amp = 10^(slider1/20);
+amp = 2*10^(slider1/20);
 // convert percentage to raw scale factor
 lowStrength = slider3;
 highstrength = slider4;
@@ -211,8 +205,8 @@ spl2 += amp * outCwet;
 spl3 += amp * outLFE;
 spl4 += amp * outRL;
 spl5 += amp * outRR;
-spl6 += amp * (outRL + outL) * 0.70710678118654752;
-spl7 += amp * (outRR + outR) * 0.70710678118654752;
+spl6 += amp * (outRL + outL) * 0.5;
+spl7 += amp * (outRR + outR) * 0.5;
 
 // write to input tile buffers:
 // Left + Right input buffers
