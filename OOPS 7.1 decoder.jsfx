@@ -201,10 +201,10 @@ outRR = (outRRPart1 + outRRPart2);
 // output audio
 spl0 = amp * outL;
 spl1 = amp * outR;
-spl2 += amp * outCwet * 2;
-spl3 += amp * outLFE * 2;
-spl4 += amp * outRL;
-spl5 += amp * outRR;
+spl2 += amp * outCwet;
+spl3 += amp * outLFE;
+spl4 += amp * outRL * 1.5;
+spl5 += amp * outRR * 1.5;
 spl6 = amp * (outRL + outL) * 0.5;
 spl7 = amp * (outRR + outR) * 0.5;
 
