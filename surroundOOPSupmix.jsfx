@@ -220,10 +220,8 @@ silence <= 0 ? (
 	spl1 = amp * outR;
 	spl2 += amp * outCwet;
 	spl3 += amp * outLFE;
-	spl4 += amp * outRL * 1.5;
-	spl5 += amp * outRR * 1.5;
-	spl6 = amp * (outRL + outL) * 0.5;
-	spl7 = amp * (outRR + outR) * 0.5;
+	spl4 += amp * outRL;
+	spl5 += amp * outRR;
 ) : (
 	spl0 = 0;
 	spl1 = 0;
@@ -231,8 +229,6 @@ silence <= 0 ? (
 	spl3 = 0;
 	spl4 = 0;
 	spl5 = 0;
-	spl6 = 0;
-	spl7 = 0;
 );
 
 // write to input tile buffers:
