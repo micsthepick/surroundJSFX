@@ -109,7 +109,7 @@ HALFSIZEMINUSONE = HALFSIZE-1;
 
 // let there be two frames of silence
 // to mute the first inital buffers
-silence = 0;
+silence = 2;
 
 // set each buffer to the offsef from the last to make it easier to move them around
 // fft has real and complex values thus is twice as large
@@ -215,12 +215,25 @@ outRRPart2 = bufferO2RR[tilePos2] * windowTileOut2;
 outRR = (outRRPart1 + outRRPart2);
 
 // output audio
-spl0 = amp * outL;
-spl1 = amp * outR;
-spl2 += amp * outCwet;
-spl3 += amp * outLFE;
-spl4 += amp * outRL;
-spl5 += amp * outRR;
+silence <= 0 ? (
+	spl0 = amp * outL;
+	spl1 = amp * outR;
+	spl2 += amp * outCwet;
+	spl3 += amp * outLFE;
+	spl4 += amp * outRL * 1.5;
+	spl5 += amp * outRR * 1.5;
+	spl6 = amp * (outRL + outL) * 0.5;
+	spl7 = amp * (outRR + outR) * 0.5;
+) : (
+	spl0 = 0;
+	spl1 = 0;
+	spl2 = 0;
+	spl3 = 0;
+	spl4 = 0;
+	spl5 = 0;
+	spl6 = 0;
+	spl7 = 0;
+);
 
 // write to input tile buffers:
 // Left + Right input buffers
@@ -235,8 +248,11 @@ samplesCollected += 1;
 // once we reach the end of a tile:
 samplesCollected >= HALFSIZE ?
 (
-	samplesCollected = 0;
 	// wrap back to 0 on the tile
+	samplesCollected = 0;
+
+	// make silence go to 0
+	silence > 0 ? silence -= 1;
 
 	// fill input FFT buffers
 	// Loop over each of the audio samples, from index = 0 to SIZE - 1.
