@@ -9,12 +9,12 @@ import cookdsp.jsfx-inc
 
 slider1:0<-60,20,0.1>Output volume (dB)
 slider2:0<0,1,1{Yes, No}>Remove C and RL/RR from L and R
-slider3:0.5<-5,5,0.001>strength at Low Freq
-slider4:0.5<-5,5,0.001>strength at High Freq
+slider3:0<-5,5,0.001>strength at Low Freq
+slider4:0<-5,5,0.001>strength at High Freq
 slider7:1<0.05,2,0.05>Rear width (multiplier)
 slider8:90<1,180,0.1>Low Freq phase width (Degrees)
 slider9:90<1,180,0.1>High Freq phase width (Degrees)
--slider10:1<0,1,0.05>Attenuate if different volume
+slider10:10<1,100,1>Attenuate if different volume
 
 in_pin:left input
 in_pin:right input
@@ -29,17 +29,25 @@ out_pin:SR output
 
 
 @slider
-// db to dec
-amp = 2*10^(slider1/20);
-// convert percentage to raw scale factor
+// let amp be slider1 converted from db to linear, times 2
+amp = 10^(slider1/20)*2;
+
+// assign slider3 and slider4 to lowstrength and highstrength respectively
 lowStrength = slider3;
 highstrength = slider4;
+
+// assign slider8 and slider9 to phaseWlow and phaseWhigh,
+// converting from degrees to radians, respectively.
 phaseWlow = slider8*$pi/180;
 phaseWhigh = slider9*$pi/180;
+
+// let rwmult be the mulplicative inverse of slider 7
 rwmult = 1 / slider7;
-// fill strengthBuffer and phaseWBuffer
+
+// fill strengthBuffer and phaseWBuffer with SIZE elements
 bandIndex = 0;
 loop(SIZE,
+	// let frac be equal to the ratio of bandIndex to SIZEMINUSONE
 	frac = bandIndex/SIZEMINUSONE;
 	frac = max(0, min(1, frac));
 	// fraction of progress through range [lowBin, highBin)
@@ -62,16 +70,23 @@ loop(SIZE,
 
 
 @init
+// angles for RL and RR
 RLtheta = -$pi/6;
 RRtheta = 2*$pi/3;
+
+// calculate the cosine and sin of both RLtheta and RRtheta
 cosRLtheta = cos(RLtheta);
 sinRLtheta = sin(RLtheta);
 cosRRtheta = cos(RRtheta);
 sinRRtheta = sin(RRtheta);
+
+// square the above values
 cosRLthetaSQ = sqr(cosRLtheta);
 sinRLthetaSQ = sqr(sinRLtheta);
 cosRRthetaSQ = sqr(cosRRtheta);
 sinRRthetaSQ = sqr(sinRRtheta);
+
+// compute the abs of sin of 2 times RLtheta and RRtheta respectively
 sin2RLThetaABS = abs(sin(2*RLTheta));
 sin2RRThetaABS = abs(sin(2*RRTheta));
 
@@ -93,12 +108,14 @@ DOUBLESIZE = SIZE*2;
 HALFSIZE = SIZE/2;
 HALFSIZEINV = 2/SIZE;
 HALFSIZEMINUSONE = HALFSIZE-1;
-// track how many half frames of delay from the start we are
-// to mute the first inital buffers
 
+// let there be two frames of silence
+// to mute the first inital buffers
+silence = 0;
 
 // set each buffer to the offsef from the last to make it easier to move them around
 // fft has real and complex values thus is twice as large
+// bufferFFTIL, bufferFFTIR, bufferFFTOL, bufferFFTOR, bufferFFTOC, bufferFFTORL, bufferFFORR are all DOUBLESIZE in length (vecause they hold complex numbers)
 bufferFFTIL = 0;
 bufferFFTIR = bufferFFTIL+DOUBLESIZE;
 bufferFFTOL = bufferFFTIR+DOUBLESIZE;
@@ -106,6 +123,7 @@ bufferFFTOR = bufferFFTOL+DOUBLESIZE;
 bufferFFTOC = bufferFFTOR+DOUBLESIZE;
 bufferFFTORL = bufferFFTOC+DOUBLESIZE;
 bufferFFTORR = bufferFFTORL+DOUBLESIZE;
+// bufferI1L, bufferI2L, bufferI1R, bufferI2R, bufferO1L, bufferO2L, bufferO1R, bufferO2R, bufferO1C, bufferO2C, bufferO1RL, bufferO2RL, bufferO1RR, bufferO2RR are all SIZE lin length
 bufferI1L = bufferFFTORR+DOUBLESIZE;
 bufferI2L = bufferI1L+SIZE;
 bufferI1R = bufferI2L+SIZE;
@@ -120,27 +138,27 @@ bufferO1RL = bufferO2C+SIZE;
 bufferO2RL = bufferO1RL+SIZE;
 bufferO1RR = bufferO2RL+SIZE;
 bufferO2RR = bufferO1RR+SIZE;
+// strengthBuffer, phaseWBuffer, windowBufferIn, windowBufferOut are all SIZE in length
 strengthBuffer = bufferO2RR+SIZE;
 phaseWBuffer = strengthBuffer+SIZE;
 windowBufferIn = phaseWBuffer+SIZE;
 windowBufferOut = windowBufferIn+SIZE;
+// now freembuf the memory past the end of windowBufferOut
 freembuf(windowBufferOut+SIZE);
 
-// samplesCollected tracks the position in the last of the two tiles
-// ranges from 0 to (SIZE/2)-1
+// samplesCollected tracks the position in the last of the two tiles, starting from 0
 samplesCollected = 0;
-
+// ranges from 0 to (SIZE/2)-1
 
 // tell reaper what delay this plugin will introduce,
 // so that it can be compensated for
+// delay is one full buffer (length SIZE)
 pdc_delay = SIZE;
-// delay is one full buffer
+// the channels from 0 inclusive to 8 (not inclusive) are delayed
 pdc_bot_ch = 0; pdc_top_ch = 8;
-// which channels are delayed
-// (channel number must be greater than or equal to 0,
-// but less than 2, so 0 and 1 - LR output).
 
 // Init Cookdsp filters
+// (a buthp for CBHP1 with argument 70, and butlp for LFELP1 with argument 70)
 CBHP1.buthp(70);
 LFEBLP1.butlp(70);
 
@@ -274,71 +292,66 @@ samplesCollected >= HALFSIZE ?
 
 	//////BANDS 1 to SIZE/2-2
 	bandIndex = 1;
-	bandReal = 2;
-	bandImag = 3;
 	loop(HALFSIZE-1,
-		// get dry fft coefficeients
+		// get strength for this band
+		strength = strengthBuffer[bandIndex];
+
+		// get phase width for this band
+		phaseW = phaseWBuffer[bandIndex];
+		
+		// extract real and imaginary indexes from bandIndex
+		bandReal = 2 * bandIndex;
+		bandImag = 1 + bandReal;
+		
+		// get dry fft coefficeients from bufferFFTIL and bufferFFTIR
 		Lreal = bufferFFTIL[bandReal];
 		Limag = bufferFFTIL[bandImag];
 		Rreal = bufferFFTIR[bandReal];
 		Rimag = bufferFFTIR[bandImag];
 		
+		// find the norm squared of L and R (Ldot and Rdot)
 		Ldot = sqr(Lreal) + sqr(Limag);
 		Rdot = sqr(Rreal) + sqr(Rimag);
+		
+		// use those results to also find norm
 		Lnorm = sqrt(Ldot);
 		Rnorm = sqrt(Rdot);
-
-		strength = strengthBuffer[bandIndex];
-		// get strength
-		phaseW = phaseWBuffer[bandIndex];
-		// get phase width
 		
-		thetaC = atan2(Lreal, Limag)-atan2(Rreal, Rimag);
-		thetaC < -$pi ? thetaC += 2*$pi;
-		thetaC > $pi ? thetaC -= 2*$pi;
+		// calculate the arguments to atan2 for the difference between phases of L and R          
+		xval = Lreal*Rreal+Limag*Rimag;
+		yval = Limag*Rreal-Rimag*Lreal;
 
-		//// C
+		//// C channel
+		// find C phase (no rotation needed)
+		thetaC = atan2(yval, xval);
 
-		//normL = sqrt(sqr(Lreal) + sqr(Limag));
-		//normR = sqrt(sqr(Rreal) + sqr(Rimag));
-		//normprod = normL * normR;
-		//cosineval = Lreal * Rreal + Limag * Rimag;
-		//cosnorm = cosineval / normprod;
-		
-		
-		uncapped = abs(thetaC) / phaseW * rwmult;
-		weightC1 = min(1, uncapped);
+		// caculate C weight (weightC2) given phase
+		uncappedC = abs(thetaC) / phaseW;
+		weightC1 = min(1, uncappedC);
 		weightC2 = 1 - (weightC1 ^ strength);
-		// attenuate if relative norms are very different, and option enabled
+		
+		// calculate attenC: compare magnitudes of Lnorm and Rnorm
 		attenC = (2*Lnorm*Rnorm/(Ldot+Rdot));
+		// calculate weightC using attenC: raise attenC to (strength times slider10), and also multiply by weightC2
 		weightC = weightC2 * attenC ^ (strength * slider10);
 
 		// calculate and attenuate centre fft
-		// should divide by 2 here because two things are added together
+		// should multiply by 0.5 because two things are added together
 		Creal = (Lreal + Rreal) * weightC * 0.5;
 		Cimag = (Limag + Rimag) * weightC * 0.5;
 
 
 		//// RL
-		RLreal1 = Lreal*cosRLthetaminuspiforths + Rreal*sinRLthetaminuspiforths;
-		RLimag1 = Limag*cosRLthetaminuspiforths + Rimag*sinRLthetaminuspiforths;
-
-		RLreal2 = Lreal*cosRLthetapluspiforths + Rreal*sinRLthetapluspiforths;
-		RLimag2 = Limag*cosRLthetapluspiforths + Rimag*sinRLthetapluspiforths;
-
-		//norm1 = sqrt(sqr(RLreal1) + sqr(RLimag1));
-		//norm2 = sqrt(sqr(RLreal2) + sqr(RLimag2));
-		//normprod = norm1 * norm2;
-		//cosineval = RLreal1 * RLreal2 + RLimag1 * RLimag2;
-		//cosnorm = cosineval / normprod;
-		theta = atan2(RLreal1, RLimag1)-atan2(RLreal2, RLimag2);
-		theta < -$pi ? theta += 2*$pi;
-		theta > $pi ? theta -= 2*$pi;
-		uncapped = abs(theta) / phaseW * rwmult;
-		weightRL1 = min(1, uncapped);
+		// Find Rear phase, (twisted 180 degrees)
+		thetaRear = atan2(yval, -xval);
+		// calculate RL weight (weightRL2) given phase
+		uncappedRL = abs(thetaRear) / phaseW * rwmult;
+		weightRL1 = min(1, uncappedRL);
 		weightRL2 = 1 - (weightRL1 ^ strength);
-		// attenuate if relative norms are very different, and option enabled
+
+		// calculate attenRL: compare magnitudes of Lnorm and Rnorm by RLTheta
 		attenRL = (sin2RLThetaABS*Lnorm*Rnorm/(sinRLthetaSQ*Ldot+cosRLthetaSQ*Rdot));
+		// calculate weightRL using attenRL: raise attenRL to (strength divided by slider10), and also multiply by weightRL2
 		weightRL = weightRL2 * attenRL ^ (strength * slider10);
 
 		// calculate and attenuate RL fft
@@ -347,25 +360,16 @@ samplesCollected >= HALFSIZE ?
 		// this is RL shifted by j (90 degrees phase)
 
 		//// RR
-		RRreal1 = Lreal*cosRRthetaminuspiforths + Rreal*sinRRthetaminuspiforths;
-		RRimag1 = Limag*cosRRthetaminuspiforths + Rimag*sinRRthetaminuspiforths;
-
-		RRreal2 = Lreal*cosRRthetapluspiforths + Rreal*sinRRthetapluspiforths;
-		RRimag2 = Limag*cosRRthetapluspiforths + Rimag*sinRRthetapluspiforths;
-
-		//norm1 = sqrt(sqr(RRreal1) + sqr(RRimag1));
-		//norm2 = sqrt(sqr(RRreal2) + sqr(RRimag2));
-		//normprod = norm1 * norm2;
-		//cosineval = RRreal1 * RRreal2 + RRimag1 * RRimag2;
-		//cosnorm = cosineval / normprod;
-		theta =  atan2(RRreal1, RRimag1)-atan2(RRreal2, RRimag2);;
-		theta < -$pi ? theta += 2*$pi;
-		theta > $pi ? theta -= 2*$pi;
-		uncapped = abs(theta) / phaseW * rwmult;
-		weightRR1 = min(1, uncapped);
+		
+		// calculate RR weight (weightRR2) given phase
+		// reuse thetaRear phase here
+		uncappedRR = abs(thetaRear) / phaseW * rwmult;
+		weightRR1 = min(1, uncappedRR);
 		weightRR2 = 1 - (weightRR1 ^ strength);
-		// attenuate if relative norms are very different, and option enabled
+
+		// calculate attenRR: compare magnitudes of Lnorm and Rnorm by RRTheta
 		attenRR = (sin2RRThetaABS*Lnorm*Rnorm/(sinRRthetaSQ*Ldot+cosRRthetaSQ*Rdot));
+		// calculate weightRR using attenRR: raise attenRR to (strength times slider10), and also multiply by weightRR2
 		weightRR = weightRR2 * attenRR ^ (strength * slider10);
 
 		// calculate and attenuate RR fft
@@ -374,31 +378,17 @@ samplesCollected >= HALFSIZE ?
 		// this is RR shifted by k (-90 degrees phase)
 
 		slider2 == 0 ? (
-			// remove center from L
-			Lreal -= Creal;
-			Limag -= Cimag;
-			// remove center from R
-			Rreal -= Creal;
-			Rimag -= Cimag;
-
-			// remove RL from L
-			Lreal -= cosRLtheta*RLreal;
-			Limag -= cosRLtheta*RLimag;
-			// remove RL from  R
-			Rreal -= sinRLtheta*RLreal;
-			Rimag -= sinRLtheta*RLimag;
-
-			// remove RR from L
-			Lreal -= cosRRtheta*RRreal;
-			Limag -= cosRRtheta*RRimag;
-			// remove RR from R
-			Rreal -= sinRRtheta*RRreal;
-			Rimag -= sinRRtheta*RRimag;
+			// remove center, RL and RR from L
+			Lreal -= Creal + cosRLtheta*RLreal + cosRRtheta*RRreal;
+			Limag -= Cimag + cosRLtheta*RLimag + cosRRtheta*RRimag;
+			// remove center, RL and RR from R
+			Rreal -= Creal + sinRLtheta*RLreal + sinRRtheta*RRreal;
+			Rimag -= Cimag + sinRLtheta*RLimag + sinRRtheta*RRimag;
 		);
 
 		// fill output fft buffers
 		// because all bands from SIZE/2 onwards are 0
-		// the hilbert will be in the imaginary part of theinverse FFT results
+		// the hilbert will be in the imaginary part of the inverse FFT results
 		// but need to scale coefficeients by 2
 		bufferFFTOL[bandReal] = Lreal;
 		bufferFFTOL[bandImag] = Limag;
@@ -410,8 +400,7 @@ samplesCollected >= HALFSIZE ?
 		bufferFFTORL[bandImag] = RLimag;
 		bufferFFTORR[bandReal] = RRreal;
 		bufferFFTORR[bandImag] = RRimag;
-		bandReal += 2;
-		bandImag += 2;
+		bandIndex += 1;
 	);
 
 	////// BAND SIZE/2
