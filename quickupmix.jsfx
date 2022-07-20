@@ -1,0 +1,145 @@
+desc: minimal delay upmix of stereo audio
+
+import cookdsp.jsfx-inc
+
+slider1:0.5<0,10,0.005>strength
+slider2:10<5,20,0.1>Averaging
+slider3:0<0,12,0.1>Rear boost (db)
+slider4:rw=0.5<0.01,2,0.01>Rear width
+
+
+@init
+function dbToGain(dB)
+(
+    10^(dB/20)
+);
+
+function check_bounds(val minval maxval)
+(
+    val < minval ? minval : (val > maxval ? maxval : val)
+);
+
+function smooth(oldval newval avg)
+(
+    oldval + (newval - oldval) * avg
+);
+
+hilbL.hilbert();
+hilbR.hilbert();
+pdc_delay = 6;
+pdc_bot_ch = 0; pdc_top_ch = 6;
+RLtheta = -$pi/6;
+RLtheta2 = -$pi/6-$pi/2;
+RRtheta = 2*$pi/3;
+RRtheta2 = 2*$pi/3-$pi/2;
+Ctheta = $pi/4;
+Ctheta2 = $pi/4-$pi/2;
+
+// pre-calculate the cosine and sin of the angles
+cosRLtheta = cos(RLtheta);
+sinRLtheta = sin(RLtheta);
+cosRRtheta = cos(RRtheta);
+sinRRtheta = sin(RRtheta);
+cosRLtheta2 = cos(RLtheta2);
+sinRLtheta2 = sin(RLtheta2);
+cosRRtheta2 = cos(RRtheta2);
+sinRRtheta2 = sin(RRtheta2);
+cosCtheta = cos(Ctheta);
+sinCtheta = sin(Ctheta);
+cosCtheta2 = cos(Ctheta2);
+sinCtheta2 = sin(Ctheta2);
+
+LcoeffOld = 0;
+RcoeffOld = 0;
+RLcoeffOld = 0;
+RRcoeffOld = 0;
+CcoeffOld = 0;
+
+
+@slider
+strength = slider1;
+// enforce bounds of slider2
+slider2 = check_bounds(slider2, 5, 20);
+avg = 1-exp(-slider2);
+rb = dbToGain(slider3);
+
+
+@sample
+function get_correction_factor(absPositive absNegative strength oldval avg)
+(
+    smooth(check_bounds(sqr(absPositive / (absPositive + strength * absNegative));, 0, 1), oldval, avg)
+);
+
+function get_abs_value(real imag)
+(
+    sqrt(sqr(real) + sqr(imag))
+);
+
+function rotate(L R cosval sinval)
+(
+    L*cosval + R*sinval
+);
+
+hilbL.hilbert_do(spl0);
+hilbR.hilbert_do(spl1);
+
+Lreal = hilbL.real;
+Limag = hilbL.imag;
+Rreal = hilbR.real;
+Rimag = hilbR.imag;
+RLreal = rotate(Lreal, Rreal, cosRLtheta, sinRLtheta);
+RLimag = rotate(Limag, Rimag, cosRLtheta, sinRLtheta);
+RRreal = rotate(Lreal, Rreal, cosRRtheta, sinRRtheta);
+RRimag = rotate(Limag, Rimag, cosRRtheta, sinRRtheta);
+RLreal2 = rotate(Lreal, Rreal, cosRLtheta2, sinRLtheta2);
+RLimag2 = rotate(Limag, Rimag, cosRLtheta2, sinRLtheta2);
+RRreal2 = rotate(Lreal, Rreal, cosRRtheta2, sinRRtheta2);
+RRimag2 = rotate(Limag, Rimag, cosRRtheta2, sinRRtheta2);
+Creal = rotate(Lreal, Rreal, cosCtheta, sinCtheta);
+Cimag = rotate(Limag, Rimag, cosCtheta, sinCtheta);
+Creal2 = rotate(Lreal, Rreal, cosCtheta2, sinCtheta2);
+Cimag2 = rotate(Limag, Rimag, cosCtheta2, sinCtheta2);
+
+Labs = get_abs_value(Lreal, Limag);
+Rabs = get_abs_value(Rreal, Rimag);
+RLabs = get_abs_value(RLreal, RLimag);
+RRabs = get_abs_value(RRreal, RLimag);
+RLabs2 = get_abs_value(RLreal2, RLimag2);
+RRabs2 = get_abs_value(RRreal2, RLimag2);
+Cabs = get_abs_value(Creal, Cimag);
+Cabs2 = get_abs_value(Creal2, Cimag2);
+
+Lcoeff = get_correction_factor(Labs, Rabs, strength, LcoeffOld, avg);
+Rcoeff = get_correction_factor(Rabs, Labs, strength, RcoeffOld, avg);
+RLcoeff = get_correction_factor(RLabs, RLabs2, strength/rw, RLcoeffOld, avg);
+RRcoeff = get_correction_factor(RRabs, RRabs2, strength/rw, RRcoeffOld, avg);
+Ccoeff = get_correction_factor(Cabs, Cabs2, strength, CcoeffOld, avg);
+
+LcoeffOld = Lcoeff;
+RcoeffOld = Rcoeff;
+RLcoeffOld = RLcoeff;
+RRcoeffOld = RRcoeff;
+CcoeffOld = Ccoeff;
+
+maximum = max(
+  Lcoeff, max(
+    Rcoeff, max(
+      RLcoeff, max(
+        RRcoeff, Ccoeff
+      )
+    )
+  )
+);
+
+outL = Lreal*(1-maximum+Lcoeff);
+outR = Rreal*(1-maximum+Rcoeff);
+outRL = RLimag*(1-maximum+RLcoeff)*rb;
+outRR = RRimag*(1-maximum+RRcoeff)*rb;
+outC = Creal*(1-maximum+Ccoeff);
+
+spl0 = outL;
+spl1 = outR;
+spl2 = outC;
+spl3 = outC;
+spl4 = outRL;
+spl5 = outRR;

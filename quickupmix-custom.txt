@@ -1,0 +1,54 @@
+desc: minimal delay upmix of stereo audio
+
+import cookdsp.jsfx-inc
+
+slider1:1<0,10,0.05>Strength1
+slider2:1<0,10,0.05>Strength2
+slider3:400<40,4000,1>Averaging
+
+
+@slider
+strength1 = exp(-sldier1);
+strength2 = slider2;
+avg = slider3;
+
+
+@init
+hilbL.hilbert();
+hilbR.hilbert();
+pdc_delay = 3;
+pdc_bot_ch = 0; pdc_top_ch = 8;
+Ctheta = $pi/4;
+Ltheta = 3*$pi/8;
+Rtheta = $pi/8;
+RLtheta = 5*$pi/8;
+RRtheta = -$pi/8;
+
+
+@sample
+hilbL.hilbert_do(spl0);
+hilbR.hilbert_do(spl1);
+
+Lreal = hilbL.real;
+Limag = hilbL.imag;
+Rreal = hilbR.real;
+Rimag = hilbR.imag;
+
+// calculate the arguments to atan2 for the difference between phases of L and R          
+xval = Lreal*Rreal+Limag*Rimag;
+yval = Limag*Rreal-Rimag*Lreal;
+
+//// C channel
+// find C phase (no rotation needed)
+thetaC = atan2(yval, xval);
+
+// caculate C weight (weightC2) given phase
+uncappedC = abs(thetaC) / phaseW;
+weightC1 = min(1, uncappedC);
+weightC2 = 1 - (weightC1 ^ strength);
+
+// calculate attenC: compare magnitudes of Lnorm and Rnorm
+attenC = (2*Lnorm*Rnorm/(Ldot+Rdot));
+// calculate weightC using attenC: raise attenC to (strength times slider10), and also multiply by weightC2
+weightC = weightC2 * attenC ^ (strength * slider10);
+

@@ -1,0 +1,36 @@
+desc:White noise generator for testing surround sound plugins
+tags:noise generator stereo
+author:Michael Pannekoek
+name:White Noise Generator
+product:White Noise Generator
+vendor:Michael Pannekoek
+
+slider1:phase=0<-90,90,0.1>Phase (degrees)
+slider2:amplitude=-30<-60,0,0.1>Amplitude (dB)
+
+out_pin:noise_L
+out_pin:noise_R
+
+@init
+function radians(degrees)
+(
+    degrees * ($pi / 180.0)
+);
+
+
+@slider
+// add pi/4 so that the cosval and sinval are equal when phase is 0
+rad = radians(phase) + $pi/4;
+cosval = cos(rad);
+sinval = sin(rad);
+// convert amplitude from dB to linear
+gain = pow(10, amplitude / 20);
+
+
+@sample
+// generate a random number between -1 and 1
+ran = rand(2)-1;
+// multiply by the gain
+out = ran * gain;
+spl0 = out * cosval;
+spl1 = out * sinval;

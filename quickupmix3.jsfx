@@ -1,0 +1,145 @@
+desc: vocoder based unmatrixing
+
+import cookdsp.jsfx-inc
+
+slider1:0.5<0,3,0.005>strength
+slider2:0.5<0,1,0.01>Averaging
+slider3:0<0,12,0.1>Rear boost (db)
+slider4:rw=2<0.01,4,0.01>narrow rear
+
+
+@slider
+strength = exp(slider1);
+voco_L.vocoder_set_slope(slider2);
+voco_R.vocoder_set_slope(slider2);
+rb = dbToGain(slider3);
+
+
+@init
+function dbToGain(dB)
+(
+    10^(dB/20)
+);
+
+// will need two vocoders, one for each channel
+// 16000/2/20 = 400.0
+bands = 24;
+voco_L.vocoder(300, 2, 0.04, slider2, bands);
+voco_R.vocoder(300, 2, 0.04, slider2, bands);
+fY1_L = memalloc(bands);
+fY1_R = memalloc(bands);
+fY1_RL = memalloc(bands);
+fY1_RR = memalloc(bands);
+fY1_C = memalloc(bands);
+
+function rotate(L R cosval sinval)
+(
+    L*cosval + R*sinval;
+);
+
+function get_correction_factor(pos, neg, strength, old, c) (
+    pos == 0 && neg == 0 ? (
+      temp_ = old;
+    ) : (
+      temp_ = (abs(pos)/(abs(neg)+abs(pos)))^strength;
+    );
+    temp_ += (old - temp_) * c;
+);
+
+// overrid for function vocoder_do(signal excite)
+// directly accesses voco_L and voco_R
+function process_sample(left, right)
+(
+    c_ = 0;
+    output_L_ = 0;
+    output_R_ = 0;
+    output_RL_ = 0;
+    output_RR_ = 0;
+    output_C_ = 0;
+    loop(voco_L.stages,
+        // Analysis
+        anal_L = (voco_L.cA1[c_] * left) - (voco_L.cA1[c_] * voco_L.aX2[c_]) - (voco_L.cB1[c_] * voco_L.aY1[c_]) - (voco_L.cB2[c_] * voco_L.aY2[c_]);
+        voco_L.aX2[c_] = voco_L.aX1[c_]; voco_L.aX1[c_] = left; voco_L.aY2[c_] = voco_L.aY1[c_]; voco_L.aY1[c_] = anal_L;
+        anal_R = (voco_R.cA1[c_] * right) - (voco_R.cA1[c_] * voco_R.aX2[c_]) - (voco_R.cB1[c_] * voco_R.aY1[c_]) - (voco_R.cB2[c_] * voco_R.aY2[c_]);
+        voco_R.aX2[c_] = voco_R.aX1[c_]; voco_R.aX1[c_] = right; voco_R.aY2[c_] = voco_R.aY1[c_]; voco_R.aY1[c_] = anal_R;
+        // Synthesis
+        // Envelope generation and following:
+        L1 = rotate(left, right, cosLtheta, sinLtheta);
+        L2 = rotate(left, right, cosLtheta2, sinLtheta2);
+        R1 = rotate(left, right, cosRtheta, sinRtheta);
+        R2 = rotate(left, right, cosRtheta2, sinRtheta2);
+        RL1 = rotate(left, right, cosRLtheta, sinRLtheta);
+        RL2 = rotate(left, right, cosRLtheta2, sinRLtheta2);
+        RR1 = rotate(left, right, cosRRtheta, sinRRtheta);
+        RR2 = rotate(left, right, cosRRtheta2, sinRRtheta2);
+        C1 = rotate(left, right, cosCtheta, sinCtheta);
+        C2 = rotate(left, right, cosCtheta2, sinCtheta2);
+
+        coeffL = get_correction_factor(L1, L2, strength^rw, fY1_L[c_], voco_L.fC);
+        coeffR = get_correction_factor(R1, R2, strength^rw, fY1_R[c_], voco_L.fC);
+        coeffRL = get_correction_factor(RL1, RL2, strength^rw, fY1_RL[c_], voco_L.fC);
+        coeffRR = get_correction_factor(RR1, RR2, strength^rw, fY1_RR[c_], voco_L.fC);
+        coeffC = get_correction_factor(C1, C2, strength, fY1_C[c_], voco_L.fC);
+
+        fY1_L[c_] = coeffL;
+        fY1_R[c_] = coeffR;
+        fY1_RL[c_] = coeffRL;
+        fY1_RR[c_] = coeffRR;
+        fY1_C[c_] = coeffC;
+
+        // Output accumulator
+        output_L_ += L1 * coeffL;
+        output_R_ += R1 * coeffR;
+        output_RL_ += RL1 * coeffRL;
+        output_RR_ += RR1 * coeffRR;
+        output_C_ += C1 * coeffC;
+        c_ += 1;
+    );
+    out_L = output_L_ * voco_L.q;
+    out_R = output_R_ * voco_L.q;
+    out_RL = output_RL_ * voco_L.q;
+    out_RR = output_RR_ * voco_L.q;
+    out_C = output_C_ * voco_L.q;
+);
+
+Ltheta = 0;
+Ltheta2 = 0-$pi/2;
+Rtheta = $pi/2;
+Rtheta2 = 0;
+RLtheta = -$pi/6;
+RLtheta2 = -$pi/6-$pi/2;
+RRtheta = 2*$pi/3;
+RRtheta2 = 2*$pi/3-$pi/2;
+Ctheta = $pi/4;
+Ctheta2 = $pi/4-$pi/2;
+
+cosLtheta = cos(Ltheta);
+sinLtheta = sin(Ltheta);
+cosRtheta = cos(Rtheta);
+sinRtheta = sin(Rtheta);
+cosLtheta2 = cos(Ltheta2);
+sinLtheta2 = sin(Ltheta2);
+cosRtheta2 = cos(Rtheta2);
+sinRtheta2 = sin(Rtheta2);
+cosRLtheta = cos(RLtheta);
+sinRLtheta = sin(RLtheta);
+cosRRtheta = cos(RRtheta);
+sinRRtheta = sin(RRtheta);
+cosRLtheta2 = cos(RLtheta2);
+sinRLtheta2 = sin(RLtheta2);
+cosRRtheta2 = cos(RRtheta2);
+sinRRtheta2 = sin(RRtheta2);
+cosCtheta = cos(Ctheta);
+sinCtheta = sin(Ctheta);
+cosCtheta2 = cos(Ctheta2);
+sinCtheta2 = sin(Ctheta2);
+
+@sample
+process_sample(spl0, spl1);
+
+spl0 = out_L;
+spl1 = out_R;
+spl2 = out_C;
+spl3 = out_C;
+spl4 = out_RL * rb;
+spl5 = out_RR * rb;

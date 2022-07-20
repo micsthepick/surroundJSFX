@@ -1,0 +1,128 @@
+desc: quickly unmatrix audio
+
+import cookdsp.jsfx-inc
+
+slider1:0.5<0,10,0.005>strength
+slider2:10<5,20,0.1>Averaging
+slider3:0<0,12,0.1>Rear boost (db)
+slider4:rw=1.25<0.01,4,0.01>narrow rear
+
+
+@init
+function dbToGain(dB)
+(
+    10^(dB/20)
+);
+
+function check_bounds(val minval maxval)
+(
+    val < minval ? minval : (val > maxval ? maxval : val)
+);
+
+function smooth(oldval newval avg)
+(
+    oldval + (newval - oldval) * avg
+);
+
+Ltheta = 0;
+Ltheta2 = 0-$pi/2;
+Rtheta = $pi/2;
+Rtheta2 = 0;
+RLtheta = 5*$pi/6;
+RLtheta2 = 5*$pi/6-$pi/2;
+RRtheta = -$pi/3;
+RRtheta2 = -$pi/3-$pi/2;
+Ctheta = $pi/4;
+Ctheta2 = $pi/4-$pi/2;
+
+// pre-calculate the cosine and sin of the angles
+cosLtheta = cos(Ltheta);
+sinLtheta = sin(Ltheta);
+cosRtheta = cos(Rtheta);
+sinRtheta = sin(Rtheta);
+cosLtheta2 = cos(Ltheta2);
+sinLtheta2 = sin(Ltheta2);
+cosRtheta2 = cos(Rtheta2);
+sinRtheta2 = sin(Rtheta2);
+cosRLtheta = cos(RLtheta);
+sinRLtheta = sin(RLtheta);
+cosRRtheta = cos(RRtheta);
+sinRRtheta = sin(RRtheta);
+cosRLtheta2 = cos(RLtheta2);
+sinRLtheta2 = sin(RLtheta2);
+cosRRtheta2 = cos(RRtheta2);
+sinRRtheta2 = sin(RRtheta2);
+cosCtheta = cos(Ctheta);
+sinCtheta = sin(Ctheta);
+cosCtheta2 = cos(Ctheta2);
+sinCtheta2 = sin(Ctheta2);
+
+coeffLOld = 1;
+coeffROld = 1;
+coeffRLOld = 1;
+coeffRROld = 1;
+coeffCOld = 1;
+
+
+@slider
+strength = exp(slider1);
+// enforce bounds of slider2
+slider2 = check_bounds(slider2, 5, 20);
+avg = 1-exp(-slider2);
+avg = 1-exp(-slider2);
+rb = dbToGain(slider3);
+
+
+@sample
+function get_correction_factor(pos neg strength oldval avg)
+(
+    smooth(check_bounds(abs(pos)/(abs(neg)+abs(pos)), 0, 1)^strength, oldval, avg)
+);
+
+//function get_abs_value(real imag)
+//(
+//    sqrt(sqr(real) + sqr(imag))
+//);
+
+function rotate(L R cosval sinval)
+(
+    L*cosval + R*sinval
+);
+
+L1 = rotate(spl0, spl1, cosLtheta, sinLtheta);
+L2 = rotate(spl0, spl1, cosLtheta2, sinLtheta2);
+R1 = rotate(spl0, spl1, cosRtheta, sinRtheta);
+R2 = rotate(spl0, spl1, cosRtheta2, sinRtheta2);
+RL1 = rotate(spl0, spl1, cosRLtheta, sinRLtheta);
+RL2 = rotate(spl0, spl1, cosRLtheta2, sinRLtheta2);
+RR1 = rotate(spl0, spl1, cosRRtheta, sinRRtheta);
+RR2 = rotate(spl0, spl1, cosRRtheta2, sinRRtheta2);
+C1 = rotate(spl0, spl1, cosCtheta, sinCtheta);
+C2 = rotate(spl0, spl1, cosCtheta2, sinCtheta2);
+
+coeffL = get_correction_factor(L1, L2, strength^rw, coeffLOld, avg);
+coeffR = get_correction_factor(R1, R2, strength^rw, coeffROld, avg);
+coeffRL = get_correction_factor(RL1, RL2, strength^rw, coeffRLOld, avg);
+coeffRR = get_correction_factor(RR1, RR2, strength^rw, coeffRROld, avg);
+coeffC = get_correction_factor(C1, C2, strength, coeffCOld, avg);
+
+coeffLOld = coeffL;
+coeffROld = coeffR;
+coeffRLOld = coeffRL;
+coeffRROld = coeffRR;
+coeffCOld = coeffC;
+
+sum = coeffL + coeffR + coeffRL + coeffRR + coeffC;
+
+outL = L1*(coeffL/sum);
+outR = R1*(coeffR/sum);
+outRL = RL1*(coeffRL/sum)*rb;
+outRR = RR1*(coeffRR/sum)*rb;
+outC = C1*(coeffC/sum);
+
+spl0 = outL;
+spl1 = outR;
+spl2 = outC;
+spl3 = outC;
+spl4 = outRL;
+spl5 = outRR;
