@@ -2,35 +2,51 @@ desc: vocoder based unmatrixing
 
 import cookdsp.jsfx-inc
 
-slider1:0.5<0,3,0.005>strength
-slider2:0.5<0,1,0.01>Averaging
-slider3:0<0,12,0.1>Rear boost (db)
-slider4:rw=2<0.01,4,0.01>narrow rear
-
+slider1:stren=0.25<0,3,0.005>strength
+slider2:avg=0.5<0,1,0.01>Averaging
+slider3:gdb=0<-120,20,1>Gain (db)
+slider4:rear_b=0<0,12,0.1>Rear boost (db)
+slider5:fron_b=0<0,12,0.1>Front boost (db)
+slider6:cent_b=0<0,12,0.1>Centre boost (db)
+slider7:rw=1<0,4,0.01>Rear width
+slider8:fw=1<0,4,0.01>fear width
+slider9:cw=1<0,4,0.01>cear width
 
 @slider
-strength = exp(slider1);
-voco_L.vocoder_set_slope(slider2);
-voco_R.vocoder_set_slope(slider2);
-rb = dbToGain(slider3);
-
+strength = exp(stren);
+voco_L.vocoder_set_slope(avg);
+voco_R.vocoder_set_slope(avg);
+g = dbToGain(gdb);
+rb = dbToGain(rear_b);
+fb = dbToGain(fron_b);
+cb = dbToGain(cent_b);
 
 @init
 function dbToGain(dB)
 (
     10^(dB/20)
 );
+pdc_delay = 4;
+pdc_bot_ch = 0; pdc_top_ch = 8;
 
 // will need two vocoders, one for each channel
 // 16000/2/20 = 400.0
 bands = 24;
-voco_L.vocoder(300, 2, 0.04, slider2, bands);
-voco_R.vocoder(300, 2, 0.04, slider2, bands);
+voco_L.vocoder(62.5, 2^(1/3), 20, avg, bands);
+voco_R.vocoder(62.5, 2^(1/3), 20, avg, bands);
+// delays to help isolate the residue
+d0.delay(500);
+d1.delay(500);
 fY1_L = memalloc(bands);
 fY1_R = memalloc(bands);
 fY1_RL = memalloc(bands);
 fY1_RR = memalloc(bands);
 fY1_C = memalloc(bands);
+fY1_res_L = 0;
+fY1_res_R = 0;
+fY1_res_RL = 0;
+fY1_res_RR = 0;
+fY1_res_C = 0;
 
 function rotate(L R cosval sinval)
 (
@@ -50,36 +66,48 @@ function get_correction_factor(pos, neg, strength, old, c) (
 // directly accesses voco_L and voco_R
 function process_sample(left, right)
 (
+    left_del = d0.delay_fread3(4);
+    right_del = d1.delay_fread3(4);
+    
+    d0.delay_write(left);
+    d1.delay_write(right);
+    
     c_ = 0;
     output_L_ = 0;
     output_R_ = 0;
     output_RL_ = 0;
     output_RR_ = 0;
     output_C_ = 0;
+    L_syn = 0;
+    R_syn = 0;
     loop(voco_L.stages,
         // Analysis
         anal_L = (voco_L.cA1[c_] * left) - (voco_L.cA1[c_] * voco_L.aX2[c_]) - (voco_L.cB1[c_] * voco_L.aY1[c_]) - (voco_L.cB2[c_] * voco_L.aY2[c_]);
         voco_L.aX2[c_] = voco_L.aX1[c_]; voco_L.aX1[c_] = left; voco_L.aY2[c_] = voco_L.aY1[c_]; voco_L.aY1[c_] = anal_L;
         anal_R = (voco_R.cA1[c_] * right) - (voco_R.cA1[c_] * voco_R.aX2[c_]) - (voco_R.cB1[c_] * voco_R.aY1[c_]) - (voco_R.cB2[c_] * voco_R.aY2[c_]);
         voco_R.aX2[c_] = voco_R.aX1[c_]; voco_R.aX1[c_] = right; voco_R.aY2[c_] = voco_R.aY1[c_]; voco_R.aY1[c_] = anal_R;
+        
+        L_syn += anal_L;
+        R_syn += anal_R;
+        
         // Synthesis
         // Envelope generation and following:
-        L1 = rotate(left, right, cosLtheta, sinLtheta);
-        L2 = rotate(left, right, cosLtheta2, sinLtheta2);
-        R1 = rotate(left, right, cosRtheta, sinRtheta);
-        R2 = rotate(left, right, cosRtheta2, sinRtheta2);
-        RL1 = rotate(left, right, cosRLtheta, sinRLtheta);
-        RL2 = rotate(left, right, cosRLtheta2, sinRLtheta2);
-        RR1 = rotate(left, right, cosRRtheta, sinRRtheta);
-        RR2 = rotate(left, right, cosRRtheta2, sinRRtheta2);
-        C1 = rotate(left, right, cosCtheta, sinCtheta);
-        C2 = rotate(left, right, cosCtheta2, sinCtheta2);
+        L1 = rotate(anal_L, anal_R, cosLtheta, sinLtheta);
+        L2 = rotate(anal_L, anal_R, cosLtheta2, sinLtheta2);
+        R1 = rotate(anal_L, anal_R, cosRtheta, sinRtheta);
+        R2 = rotate(anal_L, anal_R, cosRtheta2, sinRtheta2);
+        RL1 = rotate(anal_L, anal_R, cosRLtheta, sinRLtheta);
+        RL2 = rotate(anal_L, anal_R, cosRLtheta2, sinRLtheta2);
+        RR1 = rotate(anal_L, anal_R, cosRRtheta, sinRRtheta);
+        RR2 = rotate(anal_L, anal_R, cosRRtheta2, sinRRtheta2);
+        C1 = rotate(anal_L, anal_R, cosCtheta, sinCtheta);
+        C2 = rotate(anal_L, anal_R, cosCtheta2, sinCtheta2);
 
-        coeffL = get_correction_factor(L1, L2, strength^rw, fY1_L[c_], voco_L.fC);
-        coeffR = get_correction_factor(R1, R2, strength^rw, fY1_R[c_], voco_L.fC);
-        coeffRL = get_correction_factor(RL1, RL2, strength^rw, fY1_RL[c_], voco_L.fC);
-        coeffRR = get_correction_factor(RR1, RR2, strength^rw, fY1_RR[c_], voco_L.fC);
-        coeffC = get_correction_factor(C1, C2, strength, fY1_C[c_], voco_L.fC);
+        coeffL = get_correction_factor(L1, L2, strength*fw, fY1_L[c_], voco_L.fC);
+        coeffR = get_correction_factor(R1, R2, strength*fw, fY1_R[c_], voco_L.fC);
+        coeffRL = get_correction_factor(RL1, RL2, strength*rw, fY1_RL[c_], voco_L.fC);
+        coeffRR = get_correction_factor(RR1, RR2, strength*rw, fY1_RR[c_], voco_L.fC);
+        coeffC = get_correction_factor(C1, C2, strength*cw, fY1_C[c_], voco_L.fC);
 
         fY1_L[c_] = coeffL;
         fY1_R[c_] = coeffR;
@@ -95,15 +123,41 @@ function process_sample(left, right)
         output_C_ += C1 * coeffC;
         c_ += 1;
     );
-    out_L = output_L_ * voco_L.q;
-    out_R = output_R_ * voco_L.q;
-    out_RL = output_RL_ * voco_L.q;
-    out_RR = output_RR_ * voco_L.q;
-    out_C = output_C_ * voco_L.q;
+    L_residue = left_del - L_syn;
+    R_residue = right_del - R_syn;
+    
+    L1 = rotate(L_residue, R_residue, cosLtheta, sinLtheta);
+    L2 = rotate(L_residue, R_residue, cosLtheta2, sinLtheta2);
+    R1 = rotate(L_residue, R_residue, cosRtheta, sinRtheta);
+    R2 = rotate(L_residue, R_residue, cosRtheta2, sinRtheta2);
+    RL1 = rotate(L_residue, R_residue, cosRLtheta, sinRLtheta);
+    RL2 = rotate(L_residue, R_residue, cosRLtheta2, sinRLtheta2);
+    RR1 = rotate(L_residue, R_residue, cosRRtheta, sinRRtheta);
+    RR2 = rotate(L_residue, R_residue, cosRRtheta2, sinRRtheta2);
+    C1 = rotate(L_residue, R_residue, cosCtheta, sinCtheta);
+    C2 = rotate(L_residue, R_residue, cosCtheta2, sinCtheta2);
+    
+    fY1_res_L = get_correction_factor(L1, L2, strength*fw, fY1_res_L, voco_L.fC);
+    fY1_res_R = get_correction_factor(R1, R2, strength*fw, fY1_res_R, voco_L.fC);
+    fY1_res_RL = get_correction_factor(RL1, RL2, strength*rw, fY1_res_RL, voco_L.fC);
+    fY1_res_RR = get_correction_factor(RR1, RR2, strength*rw, fY1_res_RR, voco_L.fC);
+    fY1_res_C = get_correction_factor(C1, C2, strength*cw, fY1_res_C, voco_L.fC);
+    
+    output_L_ += L1 * fY1_res_L;
+    output_R_ += R1 * fY1_res_R;
+    output_RL_ += RL1 * fY1_res_RL;
+    output_RR_ += RR1 * fY1_res_RR;
+    output_C_ += C1 * fY1_res_C;
+    
+    out_L = output_L_;// * voco_L.q;
+    out_R = output_R_;// * voco_L.q;
+    out_RL = output_RL_;// * voco_L.q;
+    out_RR = output_RR_;// * voco_L.q;
+    out_C = output_C_;// * voco_L.q;
 );
 
 Ltheta = 0;
-Ltheta2 = 0-$pi/2;
+Ltheta2 = -$pi/2;
 Rtheta = $pi/2;
 Rtheta2 = 0;
 RLtheta = -$pi/6;
@@ -137,9 +191,9 @@ sinCtheta2 = sin(Ctheta2);
 @sample
 process_sample(spl0, spl1);
 
-spl0 = out_L;
-spl1 = out_R;
-spl2 = out_C;
-spl3 = out_C;
-spl4 = out_RL * rb;
-spl5 = out_RR * rb;
+spl0 = g * out_L * fb;
+spl1 = g * out_R * fb;
+spl2 = g * out_C * cb;
+spl3 = g * out_C * cb;
+spl4 = g * out_RL * rb;
+spl5 = g * out_RR * rb;
