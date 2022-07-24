@@ -5,12 +5,12 @@ import cookdsp.jsfx-inc
 slider1:stren=0.25<0,3,0.005>strength
 slider2:avg=0.5<0,1,0.01>Averaging
 slider3:gdb=0<-120,20,1>Gain (db)
-slider4:rear_b=0<0,12,0.1>Rear boost (db)
-slider5:fron_b=0<0,12,0.1>Front boost (db)
-slider6:cent_b=0<0,12,0.1>Centre boost (db)
+slider4:rear_b=0<-12,12,0.1>Rear boost (db)
+slider5:fron_b=0<-12,12,0.1>Front boost (db)
+slider6:cent_b=0<-12,12,0.1>Centre boost (db)
 slider7:rw=1<0,4,0.01>Rear width
-slider8:fw=1<0,4,0.01>fear width
-slider9:cw=1<0,4,0.01>cear width
+slider8:fw=1<0,4,0.01>font width
+slider9:cw=1<0,4,0.01>center width
 
 @slider
 strength = exp(stren);
