@@ -41,20 +41,10 @@ fY1_R = memalloc(bands);
 fY1_RL = memalloc(bands);
 fY1_RR = memalloc(bands);
 fY1_C = memalloc(bands);
-fY1_res_L = 0;
-fY1_res_R = 0;
-fY1_res_RL = 0;
-fY1_res_RR = 0;
-fY1_res_C = 0;
-
-function rotate(L R cosval sinval)
-(
-    L*cosval + R*sinval;
-);
 
 function get_correction_factor(pos, neg, strength, old, c) (
     pos != 0 || neg != 0 ? (
-        temp_ = 1;//max(0, min(1, 1+abs(pos)-2*abs(neg)))^strength;
+        temp_ = max(0, min(1, 1+abs(pos)-2*abs(neg)))^strength;
         temp_ += (old - temp_) * c;
     ) : (
         old;
@@ -78,16 +68,16 @@ function process_sample()
         
         // Synthesis
         // Envelope generation and following:
-        L1 = rotate(anal_L, anal_R, cosLtheta, sinLtheta);
-        L2 = rotate(anal_L, anal_R, cosLtheta2, sinLtheta2);
-        R1 = rotate(anal_L, anal_R, cosRtheta, sinRtheta);
-        R2 = rotate(anal_L, anal_R, cosRtheta2, sinRtheta2);
-        RL1 = rotate(anal_L, anal_R, cosRLtheta, sinRLtheta);
-        RL2 = rotate(anal_L, anal_R, cosRLtheta2, sinRLtheta2);
-        RR1 = rotate(anal_L, anal_R, cosRRtheta, sinRRtheta);
-        RR2 = rotate(anal_L, anal_R, cosRRtheta2, sinRRtheta2);
-        C1 = rotate(anal_L, anal_R, cosCtheta, sinCtheta);
-        C2 = rotate(anal_L, anal_R, cosCtheta2, sinCtheta2);
+        L1 = anal_L*cosLtheta + anal_R*sinLtheta;
+        L2 = anal_L*cosLtheta2 + anal_R*sinLtheta2;
+        R1 = anal_L*cosRtheta + anal_R*sinRtheta;
+        R2 = anal_L*cosRtheta2 + anal_R*sinRtheta2;
+        RL1 = anal_L*cosRLtheta + anal_R*sinRLtheta;
+        RL2 = anal_L*cosRLtheta2 + anal_R*sinRLtheta2;
+        RR1 = anal_L*cosRRtheta + anal_R*sinRRtheta;
+        RR2 = anal_L*cosRRtheta2 + anal_R*sinRRtheta2;
+        C1 = anal_L*cosCtheta + anal_R*sinCtheta;
+        C2 = anal_L*cosCtheta2 + anal_R*sinCtheta2;
         
         
         fY1_L[c_] = get_correction_factor(L1, L2, strength*fw, fY1_L[c_], avg);
@@ -152,10 +142,10 @@ loop(bandpow,
         frac1 = (fi / bc / 2);
         frac = bot_frac * (top_frac/bot_frac) ^ frac1;
         coeff = exp(-2*$pi*frac);
-        Lbands[2*bi] = Lbands[bi] + (Lbands[2*bi] - Lbands[bi]) * coeff;
-        Rbands[2*bi] = Rbands[bi] + (Rbands[2*bi] - Rbands[bi]) * coeff;
-        Lbands[2*bi+1] = Lbands[bi] - Lbands[2*bi];
-        Rbands[2*bi+1] = Rbands[bi] - Rbands[2*bi];
+        Lbands[2*bi+1] = (Lbands[bi] - Lbands[2*bi]) * coeff;
+        Rbands[2*bi+1] = (Rbands[bi] - Rbands[2*bi]) * coeff;
+        Lbands[2*bi] = Lbands[bi] - Lbands[2*bi+1];
+        Rbands[2*bi] = Rbands[bi] - Rbands[2*bi+1];
         bi += 1;
         fi += 2;
     );
