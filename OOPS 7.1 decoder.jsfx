@@ -1,7 +1,7 @@
 // based on vocalrediso.jsfx
 // uses some code from https://github.com/Nbickford/REAPERDenoiser
 
-desc: decode OOPS at -pi/6 and 2/3*pi with better seperation
+desc: decode matrixed channels with better seperation
 //tags: processing stereo surround phase fft
 //author: Michael Pannekoek
 
@@ -27,15 +27,10 @@ out_pin:RR output
 
 
 @slider
-// calculate sinc, handling 0 as the limiting value
-function sinc(x)
-(
-	sincIn = $pi * x;
-	sincIn == 0 ? 1 : sin(sincIn) / sincIn;
-);
-// db to dec
+// let amp be slider1 converted from dB to linear
 amp = 10^(slider1/20);
-// convert percentage to raw scale factor
+
+// assign slider3 and slider4 to lowstrength and highstrength respectively
 lowStrength = slider3;
 highstrength = slider4;
 
@@ -108,7 +103,7 @@ sinCtheta2 = sin(Ctheta2);
 // init variables
 // buffers
 // FFT - fft window size (will be constant)
-SIZE = 1024;
+SIZE = 8192;
 SIZEMINUSONE = SIZE-1;
 DOUBLESIZE = SIZE*2;
 HALFSIZE = SIZE/2;
@@ -160,11 +155,8 @@ samplesCollected = 0;
 // so that it can be compensated for
 // delay is one full buffer (length SIZE)
 pdc_delay = SIZE;
-// delay is one full buffer
-pdc_bot_ch = 0; pdc_top_ch = 6;
-// which channels are delayed
-// (channel number must be greater than or equal to 0,
-// but less than 2, so 0 and 1 - LR output).
+// the channels from 0 inclusive to 8 (not inclusive) are delayed
+pdc_bot_ch = 0; pdc_top_ch = 8;
 
 // Init Cookdsp filters
 // (a buthp for CBHP1 with argument 70, and butlp for LFELP1 with argument 70)
@@ -475,4 +467,3 @@ samplesCollected >= HALFSIZE ?
 
 // sliders are serialized automatically
 // thus nothing to serialize, as nothing else makes sense to store
-

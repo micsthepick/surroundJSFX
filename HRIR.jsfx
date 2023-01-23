@@ -1,0 +1,323 @@
+desc:HRIR Headphones Virtualization
+tags: Surround
+author: micsthepick
+
+// sliders definition
+slider1:/hrir:waves.wav:WAV File
+slider2:0<-60,20,0.5>L Gain
+slider3:0<-60,20,0.5>R Gain
+slider4:0<-60,20,0.5>SL Gain
+slider5:0<-60,20,0.5>SR Gain
+slider6:0<-60,20,0.5>RL Gain
+slider7:0<-60,20,0.5>RR Gain
+slider8:0<-60,20,0.5>C Gain
+slider9:0<-60,20,0.5>LFE Gain
+slider10:110<20,20000,100>Cutoff Frequency
+
+// pin configuration
+in_pin:in1
+in_pin:in2
+in_pin:in3
+in_pin:in4
+in_pin:in5
+in_pin:in6
+in_pin:in7
+in_pin:in8
+out_pin:out1
+out_pin:out2
+
+import cookdsp.jsfx-inc
+
+@init
+function dbtolin(dB) (
+   2^(dB/6);
+);
+lfe_filt.butlp(slider10);
+
+// the convolution spectra will live at the start of the heap
+FFTconvBuf = 0;
+
+function read_hrir() (
+  // open the impulse file, making sure to match samplerates
+  nch = 'rqsr';
+  samplerate = srate;
+  handle = file_open(slider1);
+  // if we sucessfully opened the file
+  handle > 0 ? (
+    // read the file as a sound file, requesting REAPER
+    // to resample to the current srate
+    file_riff(handle, nch, samplerate);
+    // handle now references a handle to the matched samplerate
+    // impulse file
+    // get the total length of the HRIR impulse response file
+    spc = file_avail(handle) / nch;
+    // check that we have the correct number of channels
+    nch == 7 || nch == 14 ? (
+      // find the number of samples for each channel individually
+      //spc = total_size / nch;
+      // minimum fftsize is 16, start with that
+      FFTSIZE = 16;
+      // try to increase fft size up to 12 times, and then give up
+      loop(12,
+        // if the FFTSIZE is greater or equal to samples per channel
+        // do nothing
+        FFTSIZE < spc ? FFTSIZE = FFTSIZE << 1;
+      );
+      // for now, only accept HRIRs that are short enough to fit in one fft
+      FFTSIZE >= spc ? (
+        // shorthand variable (double FFTSIZE)
+        DFFTSIZE = 2*FFTSIZE;
+        // determine size of chunk of audio to use, adding one, as
+        // one sample (spc==1) would lead to constant utilization of the fft
+        CHUNK = FFTSIZE - spc + 1;
+        // shorthand variable
+        DCHUNK = 2*CHUNK;
+        // remainder after taking chunk from FFTSIZE
+        REMAINDER = FFTSIZE - CHUNK;
+        // shorthand variable
+        DREMAINDER = 2*REMAINDER;
+        
+        // there are 7 FFTS L and R out for, L R SL SR RL RR and C in
+        // layout of a 7-channel file is as follows
+        // L-L L-R Ls-L Ls-R Lb-L Lb-R C-L
+        // the other 7 channels in a 14-channel file are R(*)-* C-R
+        // so all that needs to be done is speratley hancel the C channel,
+        // and for a 7 channel file, we will fill those in
+        // with the mirror image (for example swap L-L and L-R to get the
+        // equivalent of R-L and R-R's impulses.
+        
+        // alloc FFT bufs
+        // 1: the buffer for storing convolution spectra - pre zero
+        memset(FFTconvBuf, 0, DFFTSIZE*7);
+        // 2: FFT output accumulation buffer - pre zero
+        FFToutbuf = FFTconvBuf + DFFTSIZE*7;
+        memset(FFToutbuf, 0, DFFTSIZE*7);
+        // 3: FFT input processing buffer - pre zero
+        FFTinbuf =  FFToutbuf + DFFTSIZE*7;
+        memset(FFTinbuf, 0, DFFTSIZE*7);
+        // 4: inBuf: store the preprocessed spl(0-7) inputs for easy access
+        // will be 7 IEEE doubles long, but leave some extra room to make it
+        // a regular length
+        inBuf = FFTinbuf + DFFTSIZE*7;
+        // workingBuf will store segments of the input file for processing
+        workingBuf = inBuf + 16;
+        // load everything into workingBuf:
+        file_mem(handle, workingBuf, spc*nch);
+        nch == 7 ? (
+          channel_index = 0;
+          // put write_ptr at the start of FFTconvBuf
+          write_ptr = FFTconvBuf;
+          loop(3,
+            // save the L and R channel to write_ptr, and a twisted copy
+            // DFFTSIZE after
+            i = 0;
+            j = channel_index;
+            loop(spc,
+              write_ptr[DFFTSIZE+2*i+1] = write_ptr[2*i] = workingBuf[j];
+              write_ptr[DFFTSIZE+2*i] = write_ptr[2*i+1] = workingBuf[j+1];
+              i += 1;
+              j += nch;
+            );
+            channel_index += 2;
+            // have to take the fft of write_ptr+DFFTSIZE for the twisted
+            // copy and for the normal copy
+            fft(write_ptr, FFTSIZE);
+            fft(write_ptr + DFFTSIZE, FFTSIZE);
+            write_ptr += 2*DFFTSIZE;
+          );
+          write_ptr = FFTconvBuf + DFFTSIZE*6;
+          // copy C impulse to L and R
+          i = 0;
+          j = 6;
+          loop(spc,
+            write_ptr[2*i] = write_ptr[2*i+1] = workingBuf[j];
+            i += 1;
+            j += nch;
+          );
+          fft(write_ptr, FFTSIZE);
+          // no need to move channel_index or write_ptr along
+        ) : nch == 14 ? (
+          channel_index = 0;
+          // put write_ptr at the start of FFTconvBuf
+          write_ptr = FFTconvBuf;
+          // for most indexes, copy write_ptr[2*i] to left channel
+          // and write_ptr[2*i+1] to right channel, because
+          // the two channels reside next to each other,
+          // however C is an exception, so when ci == 6, pull the right channel
+          // from spc*7, as it resides there instead
+          // (L-L L-R Ls-L Ls-R Lb-L Lb-R C-L
+          //  R-L R-R Rs-L Rs-R Rb-L Rb-R C-R)
+          // fill in L-L L-R Ls-L Ls-R Lb-L Lb-R
+          loop(3,
+            i = 0;
+            j = channel_index;
+            loop(spc,
+              write_ptr[2*i] = workingBuf[j];
+              write_ptr[2*i+1] = workingBuf[j+1];
+              i += 1;
+              j += nch;
+            );
+            channel_index += 2;
+            // as always, take the fft of this segment
+            // of the convolution buffer
+            fft(write_ptr, FFTSIZE);
+            // skip one FFT slot to make room for a second pass
+            write_ptr += 2*DFFTSIZE;
+          );
+          channel_index = 7;
+          // move write_ptr DFFTSIZE past the start of FFTconvBuf to cover
+          // the missed elements
+          write_ptr = FFTconvBuf + DFFTSIZE;
+          loop(3,
+            i = 0;
+            j = channel_index;
+            loop(spc,
+              write_ptr[2*i] = workingBuf[j+1];
+              write_ptr[2*i+1] = workingBuf[j];
+              i += 1;
+              j += nch;
+            );
+            channel_index += 2;
+            // as always, take the fft of this segment
+            // of the convolution buffer
+            fft(write_ptr, FFTSIZE);
+            write_ptr += 2*DFFTSIZE;
+          );
+          write_ptr = FFTconvBuf + DFFTSIZE*6;
+          // fill in C
+          i = 0;
+          j = 6;
+          loop(spc,
+            write_ptr[i] = workingBuf[j];
+            write_ptr[i+1] = workingBuf[j+7];
+            i += 2;
+            j += nch;
+          );
+          fft(write_ptr, FFTSIZE);
+        );
+        //change pdc [plugin delay compensation] value
+        // specify that the first two channels have a delay
+        pdc_bot_ch = 0;
+        pdc_top_ch = 2;
+        // that is CHUNK in length
+        pdc_delay = CHUNK;
+        // close file
+        file_close(handle);
+        // allow dealloc of working buf
+        freembuf(workingBuf);
+        // indicate successful load
+        prev_hrir = slider1;
+      ) : (
+        // close file
+        file_close(handle);
+        -4; // failure code -4, can't use fft
+      );
+    ) : (
+      file_close(handle);
+      -2; // failure code -2 incorrect format
+    );
+  ) : (
+    nch = -1; // failure code -1 can't open file
+  );
+);
+read_hrir();
+
+
+@slider
+dbtolin_L = dbtolin(slider3);
+dbtolin_R = dbtolin(slider3);
+dbtolin_SL = dbtolin(slider4);
+dbtolin_SR = dbtolin(slider5);
+dbtolin_RL = dbtolin(slider6);
+dbtolin_RR = dbtolin(slider7);
+dbtolin_C = dbtolin(slider8);
+dbtolin_LFE = dbtolin(slider9);
+lfe_filt.butlp_set_freq(slider10);
+
+// check if slider1 changes
+slider1 != prev_hrir ? (
+  read_hrir();
+);
+
+
+@sample
+
+spl0 *= dbtolin_L;
+spl1 *= dbtolin_R;
+spl2 *= dbtolin_C;
+spl3 *= dbtolin_LFE;
+spl4 *= dbtolin_RL;
+spl5 *= dbtolin_RR;
+spl6 *= dbtolin_SL;
+spl7 *= dbtolin_SR;
+
+inBuf[0] = spl0; // L
+inBuf[1] = spl1; // R
+inBuf[2] = spl6; // Ls
+inBuf[3] = spl7; // Rs
+inBuf[4] = spl4; // Lb
+inBuf[5] = spl5; // Rb
+inBuf[6] = (lfe_filt.butlp_do(spl3) + spl2) * 0.5; // C
+
+// pre_zero spl0 and spl1 ready to accumulate outputs
+spl0 = spl1 = 0;
+
+in_ind = 0;
+t_fftinBuf = FFTinbuf;
+t_fftoutBuf = FFToutbuf;
+loop(7,
+  // read a sample from complex coeffs in each FFT
+  spl0 += t_fftoutBuf[fft_out_pointer];
+  spl1 += t_fftoutBuf[fft_out_pointer+1];
+  
+  // write to FFTinbuf
+  t_fftinBuf[fft_out_pointer] = inBuf[in_ind] / FFTSIZE;
+  t_fftinBuf[fft_out_pointer+1] = 0;
+  // move t_fft* values by DFFTSIZE to access adjacent fft buffers
+  t_fftinBuf += DFFTSIZE;
+  t_fftoutBuf += DFFTSIZE;
+  in_ind += 1;
+);
+
+ZZZD == 1 ? (
+spl0 = FFTconvBuf[2*ind];
+spl1 = FFTconvBuf[2*ind+1];
+
+ind += 1;
+ind %= FFTSIZE*7;
+);
+
+fft_out_pointer += 2;
+fft_out_pointer >= DCHUNK ? (
+  fft_out_pointer = 0;
+  // process chunk
+  t_fftinBuf = FFTinbuf;
+  t_fftoutBuf = FFToutbuf;
+  t_fftconvBuf = FFTconvBuf;
+  loop(7,
+    // copy contents of t_fftoutBuf left by CHUNK:
+    i = 0;
+    loop(DREMAINDER,
+      t_fftoutBuf[i] = t_fftoutBuf[i+DCHUNK];
+      i += 1;
+    );
+    memset(t_fftoutBuf+DREMAINDER, 0, DCHUNK);
+    // now the start of FFToutbuf is the tail of the convolution
+    // zero out the unfilled part of fftinbuf, and perform convolution
+    memset(t_fftinBuf+DCHUNK, 0, DREMAINDER);
+    fft(t_fftinBuf, FFTSIZE);
+    convolve_c(t_fftinBuf, t_fftconvBuf, FFTSIZE);
+    ifft(t_fftinBuf, FFTSIZE);
+    // now add contents of fftinBuf to fftoutBuf
+    loop(DFFTSIZE,
+      t_fftoutBuf[] += t_fftinBuf[];
+      t_fftinBuf += 1;
+      t_fftoutBuf += 1;
+    );
+    // t_fftinBuf and t_fftoutBuf have been incremented by DFFSTIZE
+    // so increment t_fftconvBuf too, so we can start processsing the
+    // next channel
+    t_fftconvBuf += DFFTSIZE;
+  );
+);
+
