@@ -3,7 +3,7 @@
 ## installation
 
 see my other repoisitory, https://github.com/micsthepick/JSVocalRedIso, for an in depth guide to installing JSFX.
-in addition to that, you may also need to download the Hesuvi HRIRs and put them in Data/hrir in order for the HRIR.jsfx effect to function, unless you don't need to use it.
+in addition to that, you may also need to download cookdsp, and also the Hesuvi HRIRs and put them in Data/hrir, in order for the HRIR.jsfx effect to function, unless you don't need to use it.
 
 ## plugins
 
