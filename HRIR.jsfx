@@ -257,7 +257,7 @@ inBuf[2] = spl6; // Ls
 inBuf[3] = spl7; // Rs
 inBuf[4] = spl4; // Lb
 inBuf[5] = spl5; // Rb
-inBuf[6] = (lfe_filt.butlp_do(spl3) + spl2) * 0.5; // C
+inBuf[6] = lfe_filt.butlp_do(spl3) + spl2; // C
 
 // pre_zero spl0 and spl1 ready to accumulate outputs
 spl0 = spl1 = 0;
