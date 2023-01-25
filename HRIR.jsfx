@@ -224,7 +224,7 @@ read_hrir();
 
 
 @slider
-dbtolin_L = dbtolin(slider3);
+dbtolin_L = dbtolin(slider2);
 dbtolin_R = dbtolin(slider3);
 dbtolin_SL = dbtolin(slider4);
 dbtolin_SR = dbtolin(slider5);
